@@ -47,7 +47,7 @@ export default function Login() {
               console.log(session?.currentTask)
               return
             }
-            router.replace('/')
+            router.replace('/dashboard')
           },
         })
       } else if (signInAttempt.status === 'needs_second_factor') {
@@ -91,7 +91,7 @@ export default function Login() {
               console.log(session?.currentTask)
               return
             }
-            router.replace('/')
+            router.replace('/dashboard')
           },
         })
       } else {

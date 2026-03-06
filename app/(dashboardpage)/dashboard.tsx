@@ -7,18 +7,50 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 export default function Dashboard() {
-  const [showAddModal, setShowAddModal] = useState(false);
+
   const router = useRouter();
   const { user } = useUser();
+
+  const [showAddModal, setShowAddModal] = useState(false);
   const [billName, setBillName] = useState("");
   const [bills, setBills] = useState([]);
   const [inviteCode, setInviteCode] = useState(generateInviteCode());
+
+  const [guests, setGuests] = useState([]);
+
+  const [guestFirstName, setGuestFirstName] = useState("");
+  const [guestLastName, setGuestLastName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestContact, setGuestContact] = useState("");
 
   function generateInviteCode() {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
+  const addGuest = () => {
+
+    if (!guestFirstName || !guestLastName) {
+      alert("Guest name required");
+      return;
+    }
+
+    const newGuest = {
+      firstName: guestFirstName,
+      lastName: guestLastName,
+      email: guestEmail,
+      contact: guestContact
+    };
+
+    setGuests([...guests, newGuest]);
+
+    setGuestFirstName("");
+    setGuestLastName("");
+    setGuestEmail("");
+    setGuestContact("");
+  };
+
   const createBill = async () => {
+
     if (!billName) {
       alert("Bill name required");
       return;
@@ -27,23 +59,60 @@ export default function Dashboard() {
     const { data, error } = await supabase
       .from("bills")
       .insert([
-        { name: billName, invite_code: inviteCode, created_by: user?.id }
+        {
+          name: billName,
+          invite_code: inviteCode,
+          created_by: user?.id
+        }
       ])
-      .select();
+      .select()
+      .single();
 
     if (error) {
-      console.log("Supabase error:", error);
+      console.log(error);
       alert(error.message);
       return;
     }
 
-    loadBills(); // refresh the list
-    setBillName(""); // clear input
-    setInviteCode(generateInviteCode()); // generate new code for next bill
+    const billId = data.id;
+
+    await supabase.from("bill_members").insert({
+      bill_id: billId,
+      user_id: user?.id,
+      guest_name: null,
+      guest_email: null
+    });
+
+    if (guests.length > 0) {
+
+      const guestMembers = guests.map((guest) => ({
+        bill_id: billId,
+        user_id: null,
+        guest_name: `${guest.firstName} ${guest.lastName}`,
+        guest_email: guest.email
+      }));
+
+      const { error: memberError } = await supabase
+        .from("bill_members")
+        .insert(guestMembers);
+
+      if (memberError) {
+        console.log(memberError);
+        alert(memberError.message);
+        return;
+      }
+    }
+
+    loadBills();
+
+    setBillName("");
+    setGuests([]);
+    setInviteCode(generateInviteCode());
     setShowAddModal(false);
   };
 
   const loadBills = async () => {
+
     const { data, error } = await supabase
       .from("bills")
       .select("*")
@@ -64,8 +133,10 @@ export default function Dashboard() {
 
   return (
     <View style={styles.container}>
+
       <View style={styles.contentHeader}>
         <ThemedText style={styles.headerTitle}>Active Bills</ThemedText>
+
         <Pressable style={styles.addButton} onPress={() => setShowAddModal(true)}>
           <Ionicons name="add" size={20} color="#fff" />
           <ThemedText style={styles.addButtonText}>New Bill</ThemedText>
@@ -73,30 +144,38 @@ export default function Dashboard() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
+
         {bills.map((bill) => (
           <View key={bill.id} style={styles.billCard}>
+
             <View style={styles.billMainInfo}>
               <ThemedText style={styles.billName}>{bill.name}</ThemedText>
+
               <ThemedText style={styles.billDate}>
                 {new Date(bill.created_at).toLocaleDateString()}
               </ThemedText>
             </View>
 
             <View style={styles.actionRow}>
+
               <Pressable style={styles.actionIcon}>
-                {/* Sample action buttons */}
                 <Ionicons name="eye-outline" size={18} color="#666" />
               </Pressable>
+
               <Pressable style={styles.actionIcon}>
                 <Ionicons name="create-outline" size={18} color="#666" />
               </Pressable>
+
               <Pressable style={styles.actionIcon}>
                 <Ionicons name="trash-outline" size={18} color="#ff4444" />
               </Pressable>
+
               <Pressable style={styles.actionIcon}>
                 <Ionicons name="archive-outline" size={18} color="tomato" />
               </Pressable>
+
             </View>
+
           </View>
         ))}
 
@@ -105,19 +184,24 @@ export default function Dashboard() {
             <ThemedText style={styles.emptyText}>No details</ThemedText>
           </View>
         )}
+
       </ScrollView>
 
       <Modal visible={showAddModal} transparent animationType="fade">
+
         <View style={styles.modalOverlay}>
+
           <ScrollView
             contentContainerStyle={styles.modalScrollContainer}
             showsVerticalScrollIndicator={false}
           >
+
             <View style={styles.registerBox}>
+
               <ThemedText style={styles.modalTitle}>Create New Bill</ThemedText>
 
-              {/* BILL NAME */}
               <ThemedText style={styles.label}>Bill Name</ThemedText>
+
               <TextInput
                 style={styles.input}
                 placeholder="e.g. Apartment Rent"
@@ -125,61 +209,119 @@ export default function Dashboard() {
                 onChangeText={setBillName}
               />
 
-              {/* GENERATED CODE */}
               <ThemedText style={styles.label}>Generated Invite Code</ThemedText>
+
               <View style={styles.codeRow}>
-                <TextInput style={[styles.input, { flex: 1 }]} editable={false} value={inviteCode} />
-                <Pressable style={styles.regenBtn} onPress={() => setInviteCode(generateInviteCode())}>
+
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  editable={false}
+                  value={inviteCode}
+                />
+
+                <Pressable
+                  style={styles.regenBtn}
+                  onPress={() => setInviteCode(generateInviteCode())}
+                >
                   <Ionicons name="refresh" size={18} color="#fff" />
                 </Pressable>
+
               </View>
 
-              {/* SEARCH REGISTERED USERS */}
-              <ThemedText style={styles.label}>Add Registered User</ThemedText>
-              <TextInput
-                style={styles.input}
-                placeholder="Search by name or email..."
-              />
 
-              {/* ADD GUEST USER BUTTON */}
-              <Pressable style={styles.addGuestBtn}>
+              <View style={styles.guestBox}>
+
+                <ThemedText style={styles.label}>Guest Information</ThemedText>
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="First Name"
+                  value={guestFirstName}
+                  onChangeText={setGuestFirstName}
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Last Name"
+                  value={guestLastName}
+                  onChangeText={setGuestLastName}
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  value={guestEmail}
+                  onChangeText={setGuestEmail}
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Contact Number"
+                  value={guestContact}
+                  onChangeText={setGuestContact}
+                />
+
+              </View>
+
+              <Pressable style={styles.addGuestBtn} onPress={addGuest}>
                 <Ionicons name="person-add-outline" size={18} color="#fff" />
                 <ThemedText style={styles.addGuestText}>Add Guest User</ThemedText>
               </Pressable>
 
-              {/* GUEST USER FORM */}
-              <View style={styles.guestBox}>
-                <ThemedText style={styles.label}>Guest Information</ThemedText>
-                <TextInput style={styles.input} placeholder="First Name" />
-                <TextInput style={styles.input} placeholder="Last Name" />
-                <TextInput style={styles.input} placeholder="Email" keyboardType="email-address" />
-                <TextInput style={styles.input} placeholder="Contact Number" keyboardType="phone-pad" />
-              </View>
-
-              {/* INVOLVED USERS LIST PREVIEW */}
               <ThemedText style={styles.label}>Involved Persons</ThemedText>
+
               <View style={styles.userPreview}>
-                <ThemedText style={{ color: "#666" }}>
-                  (Selected users will appear here)
-                </ThemedText>
+
+                {guests.length === 0 ? (
+                  <ThemedText style={{ color: "#666" }}>
+                    (Selected users will appear here)
+                  </ThemedText>
+                ) : (
+                  guests.map((guest, index) => (
+                    <View key={index} style={{ flexDirection: "row", marginBottom: 5 }}>
+                      <Ionicons name="person-circle-outline" size={20} color="gray" />
+                      <ThemedText style={{ marginLeft: 8 }}>
+                        {guest.firstName} {guest.lastName}
+                      </ThemedText>
+                    </View>
+                  ))
+                )}
+
               </View>
 
-              {/* BUTTONS */}
               <View style={styles.modalButtons}>
-                <Pressable style={styles.cancelBtn} onPress={() => setShowAddModal(false)}>
+
+                <Pressable
+                  style={styles.cancelBtn}
+                  onPress={() => setShowAddModal(false)}
+                >
                   <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
                 </Pressable>
-                <Pressable style={styles.confirmBtn} onPress={createBill}>
-                  <ThemedText style={styles.confirmBtnText}>Create Bill</ThemedText>
+
+                <Pressable
+                  style={styles.confirmBtn}
+                  onPress={createBill}
+                >
+                  <ThemedText style={styles.confirmBtnText}>
+                    Create Bill
+                  </ThemedText>
                 </Pressable>
+
               </View>
+
             </View>
+
           </ScrollView>
+
         </View>
+
       </Modal>
+
     </View>
   );
 }
+
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f4f4', paddingTop: 50 },
