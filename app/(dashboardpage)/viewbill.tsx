@@ -3,8 +3,10 @@ import { supabase } from '@/utils/supabase';
 import { useUser } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+
+
 
 type Guest = { id: string; firstName: string; lastName: string; email: string; };
 type Expense = { id: string; name: string; amount: string; paidBy: string; involved: { guestId: string, amount: string }[]; };
@@ -38,6 +40,8 @@ export default function ViewBill() {
   // Custom Split states: stores { guestId: amountString }
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
 
+  const [inviteCode, setInviteCode] = useState<string>('');
+
   const handleAddGuest = () => {
     if (!guestFirstName || !guestEmail) return;
     const newGuest: Guest = { id: Math.random().toString(), firstName: guestFirstName, lastName: guestLastName, email: guestEmail };
@@ -63,27 +67,108 @@ export default function ViewBill() {
   React.useEffect(() => { loadInvolved(); }, []);
 
   const handleAddExpense = () => {
+  const fetchExpenses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('bill_id', billId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching expenses:', error);
+        return;
+      }
+
+      setExpenses(data || []);
+    } catch (err) {
+      console.error('Unexpected error fetching expenses:', err);
+    }
+  };
+
+  useEffect(() => {
+  const fetchBillData = async () => {
+    if (!billId) return;
+
+    try {
+      // 1️⃣ Fetch invite code from bills table
+      const { data: billData, error: billError } = await supabase
+        .from('bills')
+        .select('invite_code')
+        .eq('id', billId)
+        .single();
+
+      if (billError) throw billError;
+      setInviteCode(billData?.invite_code || '');
+
+      // 2️⃣ Fetch expenses for this bill
+      const { data: expenseData, error: expenseError } = await supabase
+        .from('expenses')
+        .select('*') // or select('id, name, cost, paid_by, involved')
+        .eq('bill_id', billId);
+
+      if (expenseError) throw expenseError;
+
+      // Optional: map to camelCase if your JSX expects it
+      const mappedExpenses = expenseData.map((e: any) => ({
+        ...e,
+        amount: e.cost,
+        paidBy: e.paid_by
+      }));
+
+      setExpenses(mappedExpenses);
+
+    } catch (error) {
+      console.error('Error fetching bill data:', error);
+    }
+  };
+
+  fetchBillData();
+}, [billId]);
+
+  const handleAddExpense = async () => {
     const totalCost = parseFloat(expCost);
     if (!expName || isNaN(totalCost)) return;
 
-    // Map the involved people to their custom amounts or equal split
+    // Map involved guests with custom amounts or equal split
     const finalInvolved = selectedInvolved.map(id => ({
       guestId: id,
       amount: customAmounts[id] || (totalCost / selectedInvolved.length).toString()
     }));
 
-    const newExp: Expense = {
-      id: Math.random().toString(),
-      name: expName,
-      amount: expCost,
-      paidBy: expPaidBy,
-      involved: finalInvolved,
-    };
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .insert([{
+          bill_id: billId,
+          name: expName,
+          cost: totalCost,
+          paid_by: expPaidBy,
+        }])
+        .select()
+        .single(); // return inserted row
 
-    setExpenses([...expenses, newExp]);
-    // Reset
-    setExpName(''); setExpCost(''); setSelectedInvolved([]); setCustomAmounts({});
-    setShowExpenseModal(false);
+      if (error) throw error;
+
+      // Add the new expense to local state with involved
+      const newExp: Expense = {
+        id: data.id,
+        name: data.name,
+        amount: data.cost.toString(),
+        paidBy: data.paid_by,
+        involved: finalInvolved,
+      };
+
+      setExpenses(prev => [newExp, ...prev]);
+
+      // Reset form
+      setExpName(''); setExpCost(''); setSelectedInvolved([]); setCustomAmounts({});
+      setShowExpenseModal(false);
+
+    } catch (err) {
+      console.error("Error adding expense:", err);
+      Alert.alert("Failed to add expense", "Please try again.");
+    }
   };
 
   const toggleInvolved = (id: string) => {
@@ -121,7 +206,9 @@ export default function ViewBill() {
         <ThemedText style={styles.billNameLarge}>{billName || "Vacation Trip"}</ThemedText>
         <View style={styles.pillGroup}>
           <View style={styles.pillInvite}><ThemedText style={styles.pillInviteText}>Code</ThemedText></View>
-          <View style={styles.pillID}><ThemedText style={styles.pillText}>72A19C</ThemedText></View>
+          <View style={styles.pillID}>
+            <ThemedText style={styles.pillText}>{inviteCode || 'Loading...'}</ThemedText>
+          </View>
         </View>
       </View>
 
@@ -136,9 +223,9 @@ export default function ViewBill() {
                     <View key={exp.id} style={styles.modernExpenseCard}>
                         <View style={styles.cardHeader}>
                             <ThemedText style={styles.expName}>{exp.name}</ThemedText>
-                            <ThemedText style={styles.expAmount}>₱{exp.amount}</ThemedText>
+                            <ThemedText style={styles.expAmount}>₱{exp.cost}</ThemedText>
                         </View>
-                        <ThemedText style={styles.expPaidBy}>Paid by <ThemedText style={{fontWeight:'700'}}>{exp.paidBy}</ThemedText></ThemedText>
+                        <ThemedText style={styles.expPaidBy}>Paid by <ThemedText style={{fontWeight:'700'}}>{exp.paid_by}</ThemedText></ThemedText>
                     </View>
                 ))}
             </ScrollView>
