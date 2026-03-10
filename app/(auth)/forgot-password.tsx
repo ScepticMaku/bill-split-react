@@ -76,6 +76,7 @@ export default function ForgotPassword() {
   const onRequestReset = async () => {
     if(validateEmail()) {
       setEmailRequestLoading(true)
+      console.log(email)
       try {
         await signIn!.create({
           strategy: 'reset_password_email_code',
@@ -86,7 +87,9 @@ export default function ForgotPassword() {
         setSuccessfulCreation(true)
       } catch(err: any) {
         setClerkErrors(err)
+        setEmailRequestLoading(false)
         console.error(JSON.stringify(err, null, 2))
+        console.log("error")
       }
     }
   };

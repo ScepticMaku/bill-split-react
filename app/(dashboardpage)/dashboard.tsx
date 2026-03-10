@@ -40,6 +40,16 @@ import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, 
         setShowSelectPeopleModal(true);  // Return to the list modal
     };
 
+    const archiveBill = async (billId: number) => {
+      console.log(billId);
+        const { error } = await supabase.from('bills').update({ status: 'archived'}).eq('id', billId);
+
+        if(error) {
+          console.error(error.message);
+          return;
+        }
+    }
+
     const createBill = async () => {
         if (!billName) { alert("Bill name required"); return; }
 
@@ -75,6 +85,7 @@ import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, 
         .from("bills")
         .select("*")
         .eq("created_by", user?.id)
+        .eq("status", "active")
         .order("created_at", { ascending: false });
         if (!error) setBills(data);
     };
@@ -332,12 +343,12 @@ import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, 
                     <ThemedText style={styles.billName}>{bill.name}</ThemedText>
                     <ThemedText style={styles.billDate}>Created {new Date(bill.created_at).toLocaleDateString()}</ThemedText>
                 </View>
-                <View style={styles.statusBadge}><ThemedText style={styles.statusText}>Active</ThemedText></View>
+                <View style={styles.statusBadge}><ThemedText style={styles.statusText}>{bill.status}</ThemedText></View>
                 </View>
                 <View style={styles.divider} />
                 <View style={styles.actionRow}>
                 <Pressable style={[styles.actionIcon, { backgroundColor: '#F2F2F7' }]}><Ionicons name="create" size={18} color="#666" /></Pressable>
-                                <Pressable style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}><Ionicons name="archive" size={18} color="#e48108" /></Pressable>
+                <Pressable style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}><Ionicons name="archive" size={18} color="#e48108" onPress={() => archiveBill(bill.id)} /></Pressable>
                 <Pressable style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}><Ionicons name="trash" size={18} color="#FF3B30" /></Pressable>
                 </View>
             </View>
