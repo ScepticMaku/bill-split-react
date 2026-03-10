@@ -2,6 +2,7 @@ import { ThemedText } from '@/components/themed-text';
 import { supabase } from "@/utils/supabase";
 import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import validator from 'validator';
@@ -9,7 +10,7 @@ import validator from 'validator';
     // --- MAIN DASHBOARD COMPONENT ---
     export default function Dashboard() {
     const { user } = useUser();
-
+const router = useRouter();
     const [bills, setBills] = useState([]);
     const [showAddModal, setShowAddModal] = useState(false);
     const [billName, setBillName] = useState("");
@@ -424,6 +425,17 @@ import validator from 'validator';
                 </View>
                 <View style={styles.divider} />
                 <View style={styles.actionRow}>
+                <Pressable 
+  style={[styles.actionIcon, { backgroundColor: '#F2F2F7' }]}
+  onPress={() => router.push({
+    pathname: '/viewbill', // Ensure this matches your file structure
+    params: { billId: bill.id, billName: bill.name }
+  })}
+>
+  <Ionicons name="create" size={18} color="#666" />
+</Pressable>
+                                <Pressable style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}><Ionicons name="archive" size={18} color="#e48108" /></Pressable>
+                <Pressable style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}><Ionicons name="trash" size={18} color="#FF3B30" /></Pressable>
                 <Pressable style={[styles.actionIcon, { backgroundColor: '#F2F2F7' }]}><Ionicons name="create" size={18} color="#666" /></Pressable>
                 <Pressable style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}><Ionicons name="archive" size={18} color="#e48108" /></Pressable>
                 <Pressable
