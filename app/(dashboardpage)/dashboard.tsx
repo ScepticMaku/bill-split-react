@@ -4,7 +4,8 @@ import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import validator from 'validator';
 
     // --- MAIN DASHBOARD COMPONENT ---
     export default function Dashboard() {
@@ -19,6 +20,8 @@ const router = useRouter();
     const [guestFirst, setGuestFirst] = useState("");
     const [guestLast, setGuestLast] = useState("");
     const [guestEmail, setGuestEmail] = useState("");
+
+    const [errors, setErrors] = useState({});
 
     // Confirmed people for the new bill
     const [selectedInvolvedPeople, setSelectedInvolvedPeople] = useState([]);
@@ -41,6 +44,16 @@ const router = useRouter();
         setShowSelectPeopleModal(true);  // Return to the list modal
     };
 
+    const archiveBill = async (billId: number) => {
+      console.log(billId);
+        const { error } = await supabase.from('bills').update({ status: 'archived'}).eq('id', billId);
+
+        if(error) {
+          console.error(error.message);
+          return;
+        }
+    }
+
     const createBill = async () => {
         if (!billName) { alert("Bill name required"); return; }
 
@@ -57,12 +70,47 @@ const router = useRouter();
 
         // Add selected members (handling both registered users and guests)
         if (selectedInvolvedPeople.length > 0) {
-        const memberInserts = selectedInvolvedPeople.map((person) => ({
-            bill_id: billId,
-            user_id: person.type === 'registered' ? person.id : null,
-            guest_name: person.type === 'guest' ? person.name : null,
-            guest_email: person.type === 'guest' ? person.email : null,
-        }));
+        const memberInserts = [];
+
+        for (const person of selectedInvolvedPeople) {
+
+            // REGISTERED USER
+            if (person.type === "registered") {
+            memberInserts.push({
+                bill_id: billId,
+                user_id: person.id,
+                guest_id: null
+            });
+            }
+
+            // GUEST USER
+            if (person.type === "guest") {
+
+            // insert guest first
+            const { data: guestData, error: guestError } = await supabase
+                .from("guest_users")
+                .insert({
+                first_name: person.name.split(" ")[0],
+                last_name: person.name.split(" ")[1] || "",
+                email: person.email
+                })
+                .select()
+                .single();
+
+            if (guestError) {
+                console.error(guestError);
+                continue;
+            }
+
+            // add to bill_members
+            memberInserts.push({
+                bill_id: billId,
+                user_id: null,
+                guest_id: guestData.id
+            });
+            }
+        }
+
         await supabase.from("bill_members").insert(memberInserts);
         }
 
@@ -76,8 +124,26 @@ const router = useRouter();
         .from("bills")
         .select("*")
         .eq("created_by", user?.id)
+        .eq("status", "active")
         .order("created_at", { ascending: false });
         if (!error) setBills(data);
+    };
+
+    const deleteBill = async (billId) => {
+        const confirmDelete = confirm("Are you sure you want to delete this bill?");
+        if (!confirmDelete) return;
+
+        const { error } = await supabase
+            .from("bills")
+            .delete()
+            .eq("id", billId);
+
+        if (error) {
+            alert(error.message);
+            return;
+        }
+
+        loadBills(); // refresh list
     };
 
     const resetForm = () => {
@@ -85,6 +151,26 @@ const router = useRouter();
         setSelectedInvolvedPeople([]);
         setInviteCode(generateInviteCode());
     };
+
+    const handleSubmit = async () => {
+        if(validateForm()) {
+            handleAddGuestSubmit()
+        }
+    }
+
+    const validateForm = () => {
+        let errors = {}
+
+        console.log(guestFirst)
+
+        if(validator.isEmpty(guestFirst)) errors.guestFirst = "First name must not be empty";
+        if(validator.isEmpty(guestLast)) errors.guestLast = "Last name must not be empty";
+        if (!validator.isEmail(guestEmail)) errors.guestEmail = "Email must be a correct format.";
+        if (validator.isEmpty(guestEmail)) errors.guestEmpty = "Email must not be empty.";
+
+        setErrors(errors)
+        return Object.keys(errors).length === 0;
+    }
 
     const handleAddGuestSubmit = () => {
         if (!guestFirst || !guestEmail) {
@@ -222,6 +308,8 @@ const router = useRouter();
         );
         };
 
+        
+
         return (
         <Modal visible={visible} transparent animationType="slide">
             <View style={styles.modalOverlay}>
@@ -333,7 +421,7 @@ const router = useRouter();
                     <ThemedText style={styles.billName}>{bill.name}</ThemedText>
                     <ThemedText style={styles.billDate}>Created {new Date(bill.created_at).toLocaleDateString()}</ThemedText>
                 </View>
-                <View style={styles.statusBadge}><ThemedText style={styles.statusText}>Active</ThemedText></View>
+                <View style={styles.statusBadge}><ThemedText style={styles.statusText}>{bill.status}</ThemedText></View>
                 </View>
                 <View style={styles.divider} />
                 <View style={styles.actionRow}>
@@ -348,6 +436,14 @@ const router = useRouter();
 </Pressable>
                                 <Pressable style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}><Ionicons name="archive" size={18} color="#e48108" /></Pressable>
                 <Pressable style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}><Ionicons name="trash" size={18} color="#FF3B30" /></Pressable>
+                <Pressable style={[styles.actionIcon, { backgroundColor: '#F2F2F7' }]}><Ionicons name="create" size={18} color="#666" /></Pressable>
+                <Pressable style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}><Ionicons name="archive" size={18} color="#e48108" /></Pressable>
+                <Pressable
+                    style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}
+                    onPress={() => deleteBill(bill.id)}
+                >
+                <Ionicons name="trash" size={18} color="#FF3B30" />
+                </Pressable>
                 </View>
             </View>
             ))}
@@ -437,11 +533,23 @@ const router = useRouter();
                         </View>
                         <ThemedText style={styles.fieldLabel}>First name</ThemedText>
                         <TextInput style={styles.modernInput} value={guestFirst} onChangeText={setGuestFirst} />
+                        {
+                            errors.guestFirst ? <Text>{errors.guestFirst}</Text> : null
+                        }
                         <ThemedText style={styles.fieldLabel}>Last name</ThemedText>
                         <TextInput style={styles.modernInput} value={guestLast} onChangeText={setGuestLast} />
+                        {
+                            errors.guestLast? <Text>{errors.guestLast}</Text> : null
+                        }
                         <ThemedText style={styles.fieldLabel}>Email address</ThemedText>
                         <TextInput style={styles.modernInput} value={guestEmail} onChangeText={setGuestEmail} keyboardType="email-address" />
-                        <Pressable style={styles.submitBtn} onPress={handleAddGuestSubmit}><ThemedText style={styles.submitBtnText}>Submit button</ThemedText></Pressable>
+                        {
+                            errors.guestEmail? <Text>{errors.guestEmail}</Text> : null
+                        }
+                        {
+                            errors.guestEmpty? <Text>{errors.guestEmpty}</Text> : null
+                        }
+                        <Pressable style={styles.submitBtn} onPress={handleSubmit}><ThemedText style={styles.submitBtnText}>Submit button</ThemedText></Pressable>
                     </View>
                 </View>
             </Modal>
