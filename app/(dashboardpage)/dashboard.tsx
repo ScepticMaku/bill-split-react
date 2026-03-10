@@ -43,6 +43,16 @@ import validator from 'validator';
         setShowSelectPeopleModal(true);  // Return to the list modal
     };
 
+    const archiveBill = async (billId: number) => {
+      console.log(billId);
+        const { error } = await supabase.from('bills').update({ status: 'archived'}).eq('id', billId);
+
+        if(error) {
+          console.error(error.message);
+          return;
+        }
+    }
+
     const createBill = async () => {
         if (!billName) { alert("Bill name required"); return; }
 
@@ -113,6 +123,7 @@ import validator from 'validator';
         .from("bills")
         .select("*")
         .eq("created_by", user?.id)
+        .eq("status", "active")
         .order("created_at", { ascending: false });
         if (!error) setBills(data);
     };
@@ -409,7 +420,7 @@ import validator from 'validator';
                     <ThemedText style={styles.billName}>{bill.name}</ThemedText>
                     <ThemedText style={styles.billDate}>Created {new Date(bill.created_at).toLocaleDateString()}</ThemedText>
                 </View>
-                <View style={styles.statusBadge}><ThemedText style={styles.statusText}>Active</ThemedText></View>
+                <View style={styles.statusBadge}><ThemedText style={styles.statusText}>{bill.status}</ThemedText></View>
                 </View>
                 <View style={styles.divider} />
                 <View style={styles.actionRow}>
