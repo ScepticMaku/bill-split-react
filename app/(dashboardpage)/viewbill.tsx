@@ -4,12 +4,12 @@ import { useUser } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 
 
 type Guest = { id: string; firstName: string; lastName: string; email: string; };
-type Expense = { id: string; name: string; amount: string; paidBy: string; involved: { guestId: string, amount: string }[]; };
+type Expense = { id: string; name: string; cost: string; paidBy: string; involved: { guestId: string, amount: string }[]; };
 
 export default function ViewBill() {
   const router = useRouter();
@@ -66,7 +66,6 @@ export default function ViewBill() {
   
   React.useEffect(() => { loadInvolved(); }, []);
 
-  const handleAddExpense = () => {
   const fetchExpenses = async () => {
     try {
       const { data, error } = await supabase
@@ -349,6 +348,37 @@ export default function ViewBill() {
       </Modal>
 
       {/* ... ADD GUEST MODAL remains same ... */}
+      <Modal visible={showGuestModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modernModalBox}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Add Person</ThemedText>
+              <Pressable style={styles.closeBtn} onPress={() => setShowGuestModal(false)}>
+                <ThemedText style={{fontWeight: '700'}}>Cancel</ThemedText>
+              </Pressable>
+            </View>
+
+            <View style={styles.inputWrapper}>
+              <ThemedText style={styles.inputLabel}>First Name</ThemedText>
+              <TextInput style={styles.modernInput} value={guestFirstName} onChangeText={setGuestFirstName} placeholder="" />
+            </View>
+
+            <View style={styles.inputWrapper}>
+              <ThemedText style={styles.inputLabel}>Last Name (Optional)</ThemedText>
+              <TextInput style={styles.modernInput} value={guestLastName} onChangeText={setGuestLastName} placeholder="" />
+            </View>
+
+            <View style={styles.inputWrapper}>
+              <ThemedText style={styles.inputLabel}>Email Address</ThemedText>
+              <TextInput style={styles.modernInput} value={guestEmail} onChangeText={setGuestEmail} keyboardType="email-address" placeholder="" autoCapitalize="none" />
+            </View>
+
+            <Pressable style={[styles.modernSubmitBtn, {marginTop: 10}]} onPress={handleAddGuest}>
+              <ThemedText style={styles.submitBtnText}>Add to Bill</ThemedText>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </View>
   );
 }
