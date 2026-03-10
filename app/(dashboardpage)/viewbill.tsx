@@ -34,8 +34,23 @@ export default function ViewBill() {
 
   const [expName, setExpName] = useState('');
   const [expCost, setExpCost] = useState('');
-  const [expPaidBy, setExpPaidBy] = useState('Host Name');
+  const [expPaidBy, setExpPaidBy] = useState("");
   const [selectedInvolved, setSelectedInvolved] = useState<string[]>([]);
+
+  const currentUserId = user?.id;
+
+  useEffect(() => { getNickname(currentUserId); }, [currentUserId]);
+
+  const getNickname = async(id:string) => {
+    const { data, error } = await supabase
+    .from("clerk_users")
+    .select(`nickname`)
+    .eq('clerk_user_id', id)
+    .single()
+
+    if(!error) setExpPaidBy(data.nickname);
+  }
+
   
   // Custom Split states: stores { guestId: amountString }
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
@@ -332,10 +347,10 @@ export default function ViewBill() {
 
             <ScrollView style={{maxHeight: 300}}>
               {selectedInvolved.map((id) => {
-                const guest = guests.find(g => g.id === id);
+                const involve = involved.find(g => g.id === id);
                 return (
                   <View key={id} style={styles.customSplitRow}>
-                    <ThemedText style={{flex: 1}}>{guest?.firstName}:</ThemedText>
+                    <ThemedText style={{flex: 1}}>{getDisplayName(involve)}:</ThemedText>
                     <View style={styles.amountSpentContainer}>
                       <TextInput 
                         style={styles.amountSpentInput} 
