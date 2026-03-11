@@ -152,16 +152,20 @@ const router = useRouter();
         if (!error) setBills(data);
     };
 
-    const archiveBill = async (billId: number) => {
-        const { error } = await supabase.from('bills').update({ status: 'archived'}).eq('id', billId);
+    const archiveBill = async (billId) => {
+        const { error } = await supabase
+            .from("bills")
+            .update({ status: "archived" })
+            .eq("id", billId);
 
-        if(error) {
-          console.error(error.message);
-          return;
+        if (error) {
+            alert(error.message);
+            return;
         }
 
-        loadBills();
-    }
+        alert("Bill archived successfully");
+        loadBills(); // refresh dashboard list
+    };
 
 
     const deleteBill = async (billId) => {
@@ -475,7 +479,12 @@ const router = useRouter();
 >
   <Ionicons name="create" size={18} color="#666" />
 </Pressable>
-                <Pressable style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}><Ionicons name="archive" size={18} color="#e48108" onPress={() => archiveBill(bill.id)} /></Pressable>
+                <Pressable
+                style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}
+                onPress={() => archiveBill(bill.id)}
+                >
+                <Ionicons name="archive" size={18} color="#e48108" />
+                </Pressable>
                 <Pressable
                     style={[styles.actionIcon, { backgroundColor: '#FFF0F0' }]}
                     onPress={() => deleteBill(bill.id)}
