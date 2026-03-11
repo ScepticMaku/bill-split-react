@@ -8,10 +8,12 @@ import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, 
 import validator from 'validator';
 
     // --- MAIN DASHBOARD COMPONENT ---
-    export default function Dashboard() {
+export default function Dashboard() {
     const { user } = useUser();
-const router = useRouter();
+    const BILL_ADD_LIMIT = 5;
+    const router = useRouter();
     const [bills, setBills] = useState([]);
+    const [userRole, setUserRole] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [billName, setBillName] = useState("");
     const [inviteCode, setInviteCode] = useState(generateInviteCode());
@@ -33,6 +35,7 @@ const router = useRouter();
         return Math.floor(100000 + Math.random() * 900000).toString();
     }
 
+
     // --- LOGIC: TRANSITION FROM SELECT TO GUEST ---
     const openGuestModal = () => {
         setShowSelectPeopleModal(false); // Hide the list modal
@@ -44,9 +47,28 @@ const router = useRouter();
         setShowSelectPeopleModal(true);  // Return to the list modal
     };
 
+    const fetchUserRole = async () => {
+        const { data, error } = await supabase
+        .from('user_has_roles')
+        .select(`*,
+            roles:role_id (
+                name
+            )
+            `)
+        .eq('clerk_user_id', user?.id);
+
+        if(!error) return setUserRole(data[0].roles.name);
+    }
+
+    useEffect(() => {
+        fetchUserRole()
+    }, []);
+
+    console.log(userRole)
 
     const createBill = async () => {
     if (!billName) { alert("Bill name required"); return; }
+    if (validator.equals(userRole, 'Standard') && getBillEntries() >= BILL_ADD_LIMIT) { alert("You have reached the maximum bills to add this month."); return;}
 
     const { data, error } = await supabase
         .from("bills")
@@ -140,7 +162,25 @@ const router = useRouter();
     loadBills();
     setShowAddModal(false);
     resetForm();
-};
+    };
+
+    const getBillEntries = () => {
+        const now = new Date();
+        const currentMonth = now.getMonth()
+        const currentYear = now.getFullYear()
+
+        const entries = bills.filter(bill => {
+            const d = new Date(bill.created_at);
+            return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        }).length;
+
+        return entries;
+    }
+
+    console.log(BILL_ADD_LIMIT)
+    // console.log(userRole)
+    console.log(getBillEntries())
+
 
     const loadBills = async () => {
         const { data, error } = await supabase
@@ -290,7 +330,7 @@ const router = useRouter();
   }
 };
 
-        const applyFilters = (users, query, currentFilter) => {
+    const applyFilters = (users, query, currentFilter) => {
         let filtered = users;
         // Filter by type
         if (currentFilter !== 'all') {
