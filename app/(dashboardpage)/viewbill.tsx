@@ -44,6 +44,10 @@ export default function ViewBill() {
 
   const [billStatus, setBillStatus] = useState('');
 
+  const [showViewExpenseModal, setShowViewExpenseModal] = useState(false);
+  const [viewingExpense, setViewingExpense] = useState<any>(null);
+  const [viewInvolved, setViewInvolved] = useState<any[]>([]);
+
   const currentUserId = user?.id;
 
   useEffect(() => { getNickname(currentUserId); }, [currentUserId]);
@@ -63,6 +67,28 @@ export default function ViewBill() {
     setShowGuestModal(true)
   }
 
+  const handleViewExpense = async (exp: any) => {
+    setViewingExpense(exp);
+
+    const { data, error } = await supabase
+      .from("expenses_involved")
+      .select(`
+        amount_spent,
+        bill_members (
+          id,
+          clerk_users:user_id (nickname),
+          guest_users:guest_id (first_name)
+        )
+      `)
+      .eq("expenses_id", exp.id);
+
+    if (!error && data) {
+      setViewInvolved(data);
+    }
+
+    setShowViewExpenseModal(true);
+  };
+
   const handleEditExpense = async (exp: any) => {
   setIsEditing(true);
   setEditingExpenseId(exp.id);
@@ -81,6 +107,9 @@ export default function ViewBill() {
     // store selected ids
     const selectedIds = data.map(i => i.bill_member_id);
     setSelectedInvolved(selectedIds);
+    if(selectedInvolved.length >= 2) {
+      setSplitType('custom')
+    }
 
     // store custom amounts
     const amounts = {};
@@ -305,10 +334,10 @@ export default function ViewBill() {
   };
 
   useEffect(() => {
-    if(selectedInvolved.length < 3) {
+    if(selectedInvolved.length <= 2) {
       setSplitType('equal')
     }
-  })
+  }, [selectedInvolved]);
   console.log(splitType)
 
   const handleCustomAmountChange = (id: string, value: string) => {
@@ -698,7 +727,10 @@ export default function ViewBill() {
           <Pressable style={styles.iconPadding} onPress={() => {handleDelete(exp.id)}}>
             <Ionicons name="trash" size={18} color="tomato" />
           </Pressable>
-          <Pressable style={styles.iconPadding} onPress={() => {/* Test */ }}>
+          <Pressable
+            style={styles.iconPadding}
+            onPress={() => handleViewExpense(exp)}
+          >
             <Ionicons name="eye" size={18} color="grey" />
           </Pressable>
         </View>
@@ -741,7 +773,7 @@ export default function ViewBill() {
         <View style={styles.modalOverlay}>
           <View style={styles.modernModalBox}>
             <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Add expense</ThemedText>
+              <ThemedText style={styles.modalTitle}>{isEditing ? "Edit Expense" : "Add Expense"}</ThemedText>
               <Pressable style={styles.closeBtn} onPress={() => setShowExpenseModal(false)}><ThemedText style={{fontWeight: '700'}}>Close</ThemedText></Pressable>
             </View>
 
@@ -813,7 +845,7 @@ export default function ViewBill() {
               )}
             </View>
             
-            <Pressable style={styles.modernSubmitBtn} onPress={handleAddExpense}>
+            <Pressable style={styles.modernSubmitBtn} onPress={isEditing ? handleUpdateExpense : handleAddExpense}>
               <ThemedText style={styles.submitBtnText}>Submit button</ThemedText>
             </Pressable>
           </View>
@@ -884,6 +916,79 @@ export default function ViewBill() {
       <Pressable style={styles.modernSubmitBtn} onPress={handleUpdateExpense}>
         <ThemedText style={styles.submitBtnText}>Save Changes</ThemedText>
       </Pressable>
+
+    </View>
+  </View>
+</Modal>
+
+{/* VIEW EXPENSE MODAL */}
+<Modal visible={showViewExpenseModal} transparent animationType="fade">
+  <View style={styles.modalOverlay}>
+    <View style={styles.modernModalBox}>
+
+      <View style={styles.modalHeader}>
+        <ThemedText style={styles.modalTitle}>Expense Details</ThemedText>
+        <Pressable
+          style={styles.closeBtn}
+          onPress={() => setShowViewExpenseModal(false)}
+        >
+          <ThemedText style={{fontWeight:'700'}}>Close</ThemedText>
+        </Pressable>
+      </View>
+
+      {viewingExpense && (
+        <>
+          <View style={{marginBottom:15}}>
+            <ThemedText style={styles.inputLabel}>Expense Name</ThemedText>
+            <ThemedText style={{fontSize:16,fontWeight:'600'}}>
+              {viewingExpense.name}
+            </ThemedText>
+          </View>
+
+          <View style={{marginBottom:15}}>
+            <ThemedText style={styles.inputLabel}>Cost</ThemedText>
+            <ThemedText style={{fontSize:16,fontWeight:'600'}}>
+              ₱{viewingExpense.cost}
+            </ThemedText>
+          </View>
+
+          <View style={{marginBottom:15}}>
+            <ThemedText style={styles.inputLabel}>Paid By</ThemedText>
+            <ThemedText style={{fontSize:16,fontWeight:'600'}}>
+              {viewingExpense.paid_by}
+            </ThemedText>
+          </View>
+
+          <ThemedText style={[styles.inputLabel,{marginTop:10}]}>
+            People Involved
+          </ThemedText>
+
+          <ScrollView style={{maxHeight:200}}>
+            {viewInvolved.map((p, index) => {
+              const member = p.bill_members;
+
+              const name =
+                member?.clerk_users?.nickname ||
+                member?.guest_users?.first_name ||
+                "Unknown";
+
+              return (
+                <View
+                  key={index}
+                  style={{
+                    flexDirection:'row',
+                    justifyContent:'space-between',
+                    paddingVertical:8
+                  }}
+                >
+                  <ThemedText>{name}</ThemedText>
+                  <ThemedText>₱{p.amount_spent}</ThemedText>
+                </View>
+              );
+            })}
+          </ScrollView>
+        </>
+      )}
 
     </View>
   </View>
