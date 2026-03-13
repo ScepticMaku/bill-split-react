@@ -69,16 +69,30 @@ const [validationMessage, setValidationMessage] = useState('');
     console.log(userRole)
     console.log("selected involved people: ", selectedInvolvedPeople);
 
-    const createBill = async () => {
-  if (!billName) { alert("Bill name required"); return; }
+ const createBill = async () => {
+  if (!billName) { 
+    alert("Bill name required"); 
+    return; 
+  }
+  
   if (validator.equals(userRole, 'Standard') && getBillEntries() >= BILL_ADD_LIMIT) { 
   setShowLimitModal(true);
   return;
 }
 
+  // Check if trying to add more than 3 people (Standard users)
+  if (validator.equals(userRole, 'Standard') && selectedInvolvedPeople.length > 3) {
+    alert('Standard users can only add up to 3 people per bill.');
+    return;
+  }
+
   const { data, error } = await supabase
     .from("bills")
-    .insert([{ name: billName, invite_code: inviteCode, created_by: user?.id }])
+    .insert([{ 
+      name: billName, 
+      invite_code: inviteCode, 
+      created_by: user?.id 
+    }])
     .select()
     .single();
 
@@ -89,18 +103,13 @@ const [validationMessage, setValidationMessage] = useState('');
 
   const billId = data.id;
 
-  // Only add selected members (NO automatic creator addition)
+  // Only add selected members
   if (selectedInvolvedPeople.length > 0) {
     const memberInserts = [];
 
     for (const person of selectedInvolvedPeople) {
       // Check if this is a registered user
-      // Fix: Check if person.id exists and is a string before using string methods
-      const isRegisteredUser = 
-        person.type === 'registered' || 
-        (person.uniqueKey && person.uniqueKey.startsWith('r-')) ||
-        (person.id && typeof person.id === 'string' && 
-         (person.id.includes('-') && person.id.length > 20));
+      const isRegisteredUser = person.type === 'registered';
 
       if (isRegisteredUser) {
         // REGISTERED USER
@@ -110,57 +119,12 @@ const [validationMessage, setValidationMessage] = useState('');
           guest_id: null
         });
       } else {
-        // GUEST USER
-        // Check if guest already exists by email
-                let guestId;
-        
-        if (person.uniqueKey && person.uniqueKey.startsWith('g-')) {
-          // Extract the numeric ID from "g-5" format
-          guestId = person.uniqueKey.replace('g-', '');
-        } else {
-          // Fallback to person.id
-          guestId = person.id;
-        }
-
-        // For guests from the selection modal, they already exist in guest_users
-        // So we just need to add them to bill_members
+        // GUEST USER - person.id should now be the actual guest_users.id
         memberInserts.push({
           bill_id: billId,
           user_id: null,
-          guest_id: guestId  // Use the extracted guest ID
+          guest_id: person.id  // This should be the database ID from guest_users
         });
-        //  else {
-        //   // Parse name for guest
-        //   let firstName = '';
-        //   let lastName = '';
-          
-        //   if (person.name) {
-        //     const nameParts = person.name.split(' ');
-        //     firstName = nameParts[0] || '';
-        //     lastName = nameParts.slice(1).join(' ') || '';
-        //   } else if (person.first_name) {
-        //     firstName = person.first_name;
-        //     lastName = person.last_name || '';
-        //   }
-
-        //   // Insert new guest
-        // //   const { data: guestData, error: guestError } = await supabase
-        // //     .from("guest_users")
-        // //     .insert({
-        // //       first_name: firstName,
-        // //       last_name: lastName,
-        // //       email: person.email
-        // //     })
-        // //     .select()
-        // //     .single();
-
-        // //   if (guestError) {
-        // //     console.error("Error creating guest:", guestError);
-        // //     continue;
-        // //   }
-          
-        //   guestId = guestData.id;
-        // }
       }
     }
 
@@ -252,42 +216,72 @@ const [validationMessage, setValidationMessage] = useState('');
         }
     }
 
-    const validateForm = () => {
-        let errors = {}
+   const validateForm = () => {
+  let errors = {};
 
-        console.log(guestFirst)
+  if (validator.isEmpty(guestFirst)) errors.guestFirst = "First name must not be empty";
+  if (!validator.isEmail(guestEmail)) errors.guestEmail = "Email must be in correct format.";
+  if (validator.isEmpty(guestEmail)) errors.guestEmail = "Email must not be empty.";
 
-        if(validator.isEmpty(guestFirst)) errors.guestFirst = "First name must not be empty";
-        if(validator.isEmpty(guestLast)) errors.guestLast = "Last name must not be empty";
-        if (!validator.isEmail(guestEmail)) errors.guestEmail = "Email must be a correct format.";
-        if (validator.isEmpty(guestEmail)) errors.guestEmpty = "Email must not be empty.";
+  setErrors(errors);
+  return Object.keys(errors).length === 0;
+};
 
-        setErrors(errors)
-        return Object.keys(errors).length === 0;
-    }
-
-    const handleAddGuestSubmit = () => {
+const handleAddGuestSubmit = async () => {
   if (!guestFirst || !guestEmail) {
     alert("First name and Email are required");
     return;
   }
-  
-  const newGuest = {
-    id: guestEmail, // Using email as temporary ID
-    name: `${guestFirst} ${guestLast}`.trim(),
-    first_name: guestFirst,
-    last_name: guestLast || '',
-    email: guestEmail,
-    type: 'guest', // Explicitly set type
-    uniqueKey: `g-${Date.now()}-${Math.random()}`
-  };
-  
-  setSelectedInvolvedPeople([...selectedInvolvedPeople, newGuest]);
-  setGuestFirst(""); 
-  setGuestLast(""); 
-  setGuestEmail("");
-  setShowAddGuestModal(false);
-  setShowSelectPeopleModal(true);
+
+  if (!validator.isEmail(guestEmail)) {
+    alert("Please enter a valid email address");
+    return;
+  }
+
+  try {
+    // 1️⃣ Insert the guest into guest_users table
+    const { data: guestData, error: guestError } = await supabase
+      .from("guest_users")
+      .insert({
+        first_name: guestFirst,
+        last_name: guestLast || '',
+        email: guestEmail
+      })
+      .select()
+      .single();
+
+    if (guestError) {
+      console.error("Error creating guest:", guestError);
+      alert("Failed to create guest. Please try again.");
+      return;
+    }
+
+    // 2️⃣ Create the guest object for local state
+    const newGuest = {
+      id: guestData.id, // Use the actual database ID
+      name: `${guestFirst} ${guestLast}`.trim(),
+      first_name: guestFirst,
+      last_name: guestLast || '',
+      email: guestEmail,
+      type: 'guest',
+      uniqueKey: `g-${guestData.id}` // Use the database ID for the uniqueKey
+    };
+
+    // 3️⃣ Add to selected people
+    setSelectedInvolvedPeople([...selectedInvolvedPeople, newGuest]);
+
+    // 4️⃣ Reset form and close modal
+    setGuestFirst(""); 
+    setGuestLast(""); 
+    setGuestEmail("");
+    setErrors({});
+    setShowAddGuestModal(false);
+    setShowSelectPeopleModal(true);
+
+  } catch (error) {
+    console.error("Unexpected error:", error);
+    alert("An unexpected error occurred");
+  }
 };
 
     useEffect(() => { loadBills(); }, []);
