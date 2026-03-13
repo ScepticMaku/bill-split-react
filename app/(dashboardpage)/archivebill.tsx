@@ -80,7 +80,7 @@ export default function Archive() {
               </View>
 
               <View style={styles.settledBadge}>
-                <ThemedText style={styles.settledText}>Settled</ThemedText>
+                <ThemedText style={styles.settledText}>{bill.status}</ThemedText>
               </View>
             </View>
 

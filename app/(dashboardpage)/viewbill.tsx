@@ -38,6 +38,8 @@ export default function ViewBill() {
   const [expPaidBy, setExpPaidBy] = useState("");
   const [selectedInvolved, setSelectedInvolved] = useState<string[]>([]);
 
+  const [billStatus, setBillStatus] = useState('');
+
   const currentUserId = user?.id;
 
   useEffect(() => { getNickname(currentUserId); }, [currentUserId]);
@@ -126,12 +128,13 @@ export default function ViewBill() {
       // 1️⃣ Fetch invite code from bills table
       const { data: billData, error: billError } = await supabase
         .from('bills')
-        .select('invite_code')
+        .select('invite_code, status')
         .eq('id', billId)
         .single();
 
       if (billError) throw billError;
       setInviteCode(billData?.invite_code || '');
+      setBillStatus(billData?.status || '');
 
       // 2️⃣ Fetch expenses for this bill
       const { data: expenseData, error: expenseError } = await supabase
@@ -554,10 +557,23 @@ export default function ViewBill() {
           <Pressable style={styles.glassBackBtn} onPress={() => router.back()}><Ionicons name="arrow-back" size={20} color="#1C1C1E" /></Pressable>
           <View style={styles.searchContainer}><Ionicons name="search" size={18} color="#AEAEB2" /><TextInput style={styles.searchInput} placeholder="Search expenses..." /></View>
         </View>
-        <Pressable style={styles.modernAddBtn} onPress={() => setShowExpenseModal(true)}>
+        <Pressable
+          style={[
+            styles.modernAddBtn,
+            billStatus === "archived" && { opacity: 0.5 }
+          ]}
+          onPress={() => setShowExpenseModal(true)}
+          disabled={billStatus === "archived"}
+        >
           <Ionicons name="add" size={20} color="#FFF" /><ThemedText style={styles.addBtnText}>Add Expense</ThemedText>
         </Pressable>
       </View>
+
+      {billStatus === "archived" && (
+        <ThemedText style={{color: "tomato", marginBottom: 10}}>
+          This bill is archived. You cannot add new expenses.
+        </ThemedText>
+      )}
 
       <View style={styles.billInfoRow}>
         <ThemedText style={styles.billNameLarge}>{billName || "Vacation Trip"}</ThemedText>
@@ -576,22 +592,50 @@ export default function ViewBill() {
                 <ThemedText style={styles.countText}>{expenses.length} Total</ThemedText>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-                {expenses.map(exp => (
-                    <View key={exp.id} style={styles.modernExpenseCard}>
-                        <View style={styles.cardHeader}>
-                            <ThemedText style={styles.expName}>{exp.name}</ThemedText>
-                            <ThemedText style={styles.expAmount}>₱{exp.cost}</ThemedText>
-                        </View>
-                        <ThemedText style={styles.expPaidBy}>Paid by <ThemedText style={{fontWeight:'700'}}>{exp.paid_by}</ThemedText></ThemedText>
-                    </View>
-                ))}
+             {expenses.map(exp => (
+  <View key={exp.id} style={styles.modernExpenseCard}>
+    <View style={styles.cardHeader}>
+      <View style={{ flex: 1 }}>
+        <ThemedText style={styles.expName}>{exp.name}</ThemedText>
+        <ThemedText style={styles.expPaidBy}>
+          Paid by <ThemedText style={{ fontWeight: '700' }}>{exp.paid_by}</ThemedText>
+        </ThemedText>
+      </View>
+      
+      <View style={{ alignItems: 'flex-end' }}>
+        <ThemedText style={styles.expAmount}>₱{exp.cost}</ThemedText>
+        {/* SIDE BY SIDE ICONS CONTAINER */}
+        <View style={styles.iconActionsRow}>
+          <Pressable style={styles.iconPadding} onPress={() => {/* Edit Logic */}}>
+            <Ionicons name="pencil" size={18} color="#007AFF" />
+          </Pressable>
+          <Pressable style={styles.iconPadding} onPress={() => {/* Delete Logic */}}>
+            <Ionicons name="trash" size={18} color="tomato" />
+          </Pressable>
+          <Pressable style={styles.iconPadding} onPress={() => {/* Delete Logic */}}>
+            <Ionicons name="eye" size={18} color="grey" />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  </View>
+))}
             </ScrollView>
         </View>
 
         <View style={styles.rightColumn}>
           <View style={styles.peopleHeader}>
             <ThemedText style={styles.columnTitle}>Involved people</ThemedText>
-            <Pressable style={styles.addPersonBtn} onPress={() => setShowSelectPeopleModal(true)}><Ionicons name="person-add" size={16} color="tomato" /></Pressable>
+            <Pressable
+              style={[
+                styles.addPersonBtn,
+                billStatus === "archived" && { opacity: 0.4 }
+              ]}
+              onPress={() => setShowGuestModal(true)}
+              disabled={billStatus === "archived"}
+            >
+              <Ionicons name="person-add" size={16} color="tomato" />
+            </Pressable>
           </View>
           <ScrollView>
             {involved.filter(i => i.user_id !== user?.id).map(involve => (
@@ -780,6 +824,15 @@ export default function ViewBill() {
 
 const styles = StyleSheet.create({
   // ... (Keep all your existing styles) ...
+  // Add these to your existing styles
+  iconActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  iconPadding: {
+    paddingLeft: 12, // Spaces the icons apart from each other
+  },
   container: { flex: 1, backgroundColor: '#F8F9FB', padding: 24, paddingTop: Platform.OS === 'ios' ? 60 : 40 },
   topTitleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   breadcrumb: { fontSize: 13, color: '#8E8E93' },
