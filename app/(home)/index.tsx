@@ -144,7 +144,7 @@ const handleRegisterGuest = async () => {
     // Navigate to guest view
     router.push({
       pathname: '/guest-view',
-      params: { inviteCode: inviteCode }
+      params: { inviteCode: inviteCode, guestEmail: email }
     });
 
     // Reset modal after short delay

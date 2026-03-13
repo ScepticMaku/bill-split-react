@@ -27,6 +27,7 @@ export default function GuestBillView() {
   const [guestInfo, setGuestInfo] = useState([]);
   const [guestFirstName, setGuestFirstName] = useState('');
   const [guestLastName, setGuestLastName] = useState('');
+  const [guestId, setGuestId] = useState('')
 
   // Modal & Password States
   const [showSignUpModal, setShowSignUpModal] = useState(false);
@@ -54,6 +55,7 @@ export default function GuestBillView() {
       if(guest) {
         setGuestFirstName(guest.first_name);
         setGuestLastName(guest.last_name);
+        setGuestId(guest.id)
       }
     } catch (err) {
       console.error(err)
@@ -210,7 +212,7 @@ export default function GuestBillView() {
               style={styles.modernSubmitBtn} 
               onPress={() => router.push({
                 pathname: '/(auth)/sign-up',
-                params: { gFName: guestFirstName, gLName: guestLastName, gEmail: guestEmail }
+                params: { gFName: guestFirstName, gLName: guestLastName, gEmail: guestEmail, gId: guestId, guest: guestInfo }
               })}
             >
               <ThemedText style={styles.submitBtnText}>Sign Up</ThemedText>
