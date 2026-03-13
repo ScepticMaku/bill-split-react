@@ -73,6 +73,7 @@ export default function Page() {
       const attempt = await signUp.attemptEmailAddressVerification({ code });
       if (attempt.status === 'complete') {
         await supabase.from('clerk_users').insert({ clerk_user_id: attempt.createdUserId, nickname });
+        await supabase.from('user_has_roles').insert({clerk_user_id: attempt.createdUserId});
         await setActive({ session: attempt.createdSessionId });
         router.replace('/');
       }

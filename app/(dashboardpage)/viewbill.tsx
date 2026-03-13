@@ -18,7 +18,7 @@ export default function ViewBill() {
   
   const [guests, setGuests] = useState<Guest[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-
+  const [splitType, setSplitType] = useState('equal')
   const [involved, setInvolved] = useState([]);
   
   // Modal Visibility States
@@ -99,7 +99,6 @@ export default function ViewBill() {
         .from('expenses')
         .select('*')
         .eq('bill_id', billId)
-        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching expenses:', error);
@@ -203,6 +202,7 @@ export default function ViewBill() {
         // Reset form
         setExpName(''); setExpCost(''); setSelectedInvolved([]); setCustomAmounts({});
         setShowExpenseModal(false);
+        fetchExpenses()
       }
 
     } catch (err) {
@@ -217,11 +217,18 @@ export default function ViewBill() {
     );
   };
 
+  useEffect(() => {
+    if(selectedInvolved.length < 3) {
+      setSplitType('equal')
+    }
+  })
+  console.log(splitType)
+
   const handleCustomAmountChange = (id: string, value: string) => {
     setCustomAmounts(prev => ({ ...prev, [id]: value }));
   };
 
-  console.log(involved)
+  console.log(selectedInvolved)
 
   // Helper to calculate remaining for Custom Modal
   const totalAllocated = Object.values(customAmounts).reduce((acc, val) => acc + (parseFloat(val) || 0), 0);
@@ -325,18 +332,46 @@ export default function ViewBill() {
               )}
             </View>
 
-            <ThemedText style={styles.inputLabel}>With:</ThemedText>
-            <ScrollView style={styles.involvedListContainer}>
-              {involved.map(g => (
-                <Pressable key={g.id} onPress={() => toggleInvolved(g.id)} style={styles.involvedRow}>
-                  <Ionicons name={selectedInvolved.includes(g.id) ? "checkbox" : "square-outline"} size={20} color="tomato" />
-                  <ThemedText style={{marginLeft: 10}}>{getDisplayName(g)}</ThemedText>
-                </Pressable>
-              ))}
-            </ScrollView>
+              {involved.length != 0 && (
+              <>
+                <ThemedText style={styles.inputLabel}>With:</ThemedText>
+                <ScrollView style={styles.involvedListContainer}>
+                  {involved.map(g => (
+                    <Pressable key={g.id} onPress={() => toggleInvolved(g.id)} style={styles.involvedRow}>
+                      <Ionicons name={selectedInvolved.includes(g.id) ? "checkbox" : "square-outline"} size={20} color="tomato" />
+                      <ThemedText style={{marginLeft: 10}}>{getDisplayName(g)}</ThemedText>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+              )}
 
-            <Pressable style={styles.actionBtn}><ThemedText style={styles.actionBtnText}>Equally Divided</ThemedText></Pressable>
-            <Pressable style={styles.actionBtn} onPress={() => setShowCustomModal(true)}><ThemedText style={styles.actionBtnText}>Custom</ThemedText></Pressable>
+            <View style={styles.toggleContainer}>
+              <Pressable 
+                style={[styles.toggleBtn, splitType === 'equal' && styles.toggleBtnActive]} 
+                onPress={() => setSplitType('equal')}
+              >
+                <ThemedText style={[styles.toggleBtnText, splitType === 'equal' && styles.toggleBtnTextActive]}>
+                  Equally Divided
+                </ThemedText>
+              </Pressable>
+
+              {selectedInvolved.length > 2 && (
+              <>
+              <Pressable 
+                style={[styles.toggleBtn, splitType === 'custom' && styles.toggleBtnActive]} 
+                onPress={() => {
+                  setSplitType('custom');
+                  setShowCustomModal(true);
+                }}
+              >
+                <ThemedText style={[styles.toggleBtnText, splitType === 'custom' && styles.toggleBtnTextActive]}>
+                  Custom
+                </ThemedText>
+              </Pressable>
+              </>
+              )}
+            </View>
             
             <Pressable style={styles.modernSubmitBtn} onPress={handleAddExpense}>
               <ThemedText style={styles.submitBtnText}>Submit button</ThemedText>
@@ -483,5 +518,35 @@ const styles = StyleSheet.create({
   // New Custom Modal Styles
   customSplitRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   amountSpentContainer: { flex: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F2F2F7', borderRadius: 10, paddingHorizontal: 10 },
-  amountSpentInput: { flex: 1, padding: 10, fontSize: 14 }
+  amountSpentInput: { flex: 1, padding: 10, fontSize: 14 },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F2F2F7', // Light grey background
+    borderRadius: 10,
+    padding: 4,
+    marginVertical: 15,
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  toggleBtnActive: {
+    backgroundColor: '#FFFFFF',
+    // Add a slight shadow for the "lifted" look
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  toggleBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  toggleBtnTextActive: {
+    color: 'tomato', // Matches your checkbox color
+  }
 });
