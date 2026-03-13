@@ -268,15 +268,34 @@ export default function ViewBill() {
                 <ThemedText style={styles.countText}>{expenses.length} Total</ThemedText>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-                {expenses.map(exp => (
-                    <View key={exp.id} style={styles.modernExpenseCard}>
-                        <View style={styles.cardHeader}>
-                            <ThemedText style={styles.expName}>{exp.name}</ThemedText>
-                            <ThemedText style={styles.expAmount}>₱{exp.cost}</ThemedText>
-                        </View>
-                        <ThemedText style={styles.expPaidBy}>Paid by <ThemedText style={{fontWeight:'700'}}>{exp.paid_by}</ThemedText></ThemedText>
-                    </View>
-                ))}
+             {expenses.map(exp => (
+  <View key={exp.id} style={styles.modernExpenseCard}>
+    <View style={styles.cardHeader}>
+      <View style={{ flex: 1 }}>
+        <ThemedText style={styles.expName}>{exp.name}</ThemedText>
+        <ThemedText style={styles.expPaidBy}>
+          Paid by <ThemedText style={{ fontWeight: '700' }}>{exp.paid_by}</ThemedText>
+        </ThemedText>
+      </View>
+      
+      <View style={{ alignItems: 'flex-end' }}>
+        <ThemedText style={styles.expAmount}>₱{exp.cost}</ThemedText>
+        {/* SIDE BY SIDE ICONS CONTAINER */}
+        <View style={styles.iconActionsRow}>
+          <Pressable style={styles.iconPadding} onPress={() => {/* Edit Logic */}}>
+            <Ionicons name="pencil" size={18} color="#007AFF" />
+          </Pressable>
+          <Pressable style={styles.iconPadding} onPress={() => {/* Delete Logic */}}>
+            <Ionicons name="trash" size={18} color="tomato" />
+          </Pressable>
+          <Pressable style={styles.iconPadding} onPress={() => {/* Delete Logic */}}>
+            <Ionicons name="eye" size={18} color="grey" />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  </View>
+))}
             </ScrollView>
         </View>
 
@@ -463,6 +482,15 @@ export default function ViewBill() {
 
 const styles = StyleSheet.create({
   // ... (Keep all your existing styles) ...
+  // Add these to your existing styles
+  iconActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  iconPadding: {
+    paddingLeft: 12, // Spaces the icons apart from each other
+  },
   container: { flex: 1, backgroundColor: '#F8F9FB', padding: 24, paddingTop: Platform.OS === 'ios' ? 60 : 40 },
   topTitleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   breadcrumb: { fontSize: 13, color: '#8E8E93' },
