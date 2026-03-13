@@ -1,4 +1,3 @@
-import { SignOutButton } from '@/components/sign-out-button';
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from "@/utils/supabase";
 import { useUser } from "@clerk/clerk-expo";
@@ -98,7 +97,7 @@ export default function Profile() {
         <Pressable style={styles.saveButton}>
             <ThemedText style={styles.saveButtonText}>Save Changes</ThemedText>
         </Pressable>
-        <SignOutButton />
+        
       </View>
     </ScrollView>
   );
