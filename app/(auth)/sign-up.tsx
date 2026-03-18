@@ -1,13 +1,8 @@
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/utils/supabase';
 import { useSignUp } from '@clerk/clerk-expo';
-<<<<<<< HEAD
-import { Ionicons } from '@expo/vector-icons';
-import { Link, useRouter } from 'expo-router';
-=======
 import { Ionicons } from '@expo/vector-icons'; // Added for the back icon
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
->>>>>>> f9eb0463061c26231664425e7086cf53d4aeaf9f
 import * as React from 'react';
 import {
   ActivityIndicator,
@@ -32,10 +27,10 @@ const InputField = ({ label, value, onChange, error, secure = false, autoCap = "
     <View style={[styles.inputContainer, style]}>
       <ThemedText style={styles.label}>{label}</ThemedText>
       <View style={styles.inputWrapper}>
-        <TextInput 
-          style={[styles.input, error && styles.inputError, isPasswordField && { paddingRight: 50 }]} 
-          value={value} 
-          onChangeText={onChange} 
+        <TextInput
+          style={[styles.input, error && styles.inputError, isPasswordField && { paddingRight: 50 }]}
+          value={value}
+          onChangeText={onChange}
           placeholder="" // Removed all placeholders
           placeholderTextColor="#C7C7CC"
           secureTextEntry={isPasswordField && !isPasswordVisible}
@@ -48,20 +43,20 @@ const InputField = ({ label, value, onChange, error, secure = false, autoCap = "
           }}
         />
         {isPasswordField && (
-          <Pressable 
-            onPress={() => setIsPasswordVisible(!isPasswordVisible)} 
+          <Pressable
+            onPress={() => setIsPasswordVisible(!isPasswordVisible)}
             style={styles.eyeIcon}
           >
-            <Ionicons 
-              name={isPasswordVisible ? "eye-off" : "eye"} 
-              size={22} 
-              color="#8E8E93" 
+            <Ionicons
+              name={isPasswordVisible ? "eye-off" : "eye"}
+              size={22}
+              color="#8E8E93"
             />
           </Pressable>
         )}
       </View>
       <View style={styles.errorContainer}>
-          {error && <Text style={styles.fieldError}>{error}</Text>}
+        {error && <Text style={styles.fieldError}>{error}</Text>}
       </View>
     </View>
   );
@@ -70,24 +65,17 @@ const InputField = ({ label, value, onChange, error, secure = false, autoCap = "
 export default function Page() {
   const { isLoaded, signUp, setActive } = useSignUp();
   const router = useRouter();
-<<<<<<< HEAD
-  
-  // Form States
-  const [firstName, setFirstName] = React.useState('');
-  const [lastName, setLastName] = React.useState('');
-=======
   const { gFName, gLName, gEmail, gId, guest } = useLocalSearchParams();
 
   // States
   const [firstName, setFirstName] = React.useState(gFName ?? '');
   const [lastName, setLastName] = React.useState(gLName ?? '');
->>>>>>> f9eb0463061c26231664425e7086cf53d4aeaf9f
   const [nickname, setNickname] = React.useState('');
   const [username, setUsername] = React.useState('');
   const [emailAddress, setEmailAddress] = React.useState(gEmail ?? '');
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
-  
+
   // UI States
   const [pendingVerification, setPendingVerification] = React.useState(false);
   const [verificationLoading, setVerificationLoading] = React.useState(false);
@@ -109,39 +97,39 @@ export default function Page() {
   }, []);
 
   const transferGuestData = async (guestId: number, cid: string) => {
-          // 1. Update bill_members to replace guest_user_id with clerk_user_id
-          await supabase
-            .from('bill_members')
-            .update({ user_id: cid, guest_id: null })
-            .eq('guest_id', guestId);
-      
-          // 2. Optionally, migrate other tables if guest had debts or expenses
-          await supabase
-            .from('expenses_involved')
-            .update({ bill_member_id: cid })  // adjust if needed
-            .eq('guest_id', guestId);
-      
-          // 3. Delete guest_user row if no longer needed
-          await supabase
-            .from('guest_users')
-            .delete()
-            .eq('id', guestId);
-        };
+    // 1. Update bill_members to replace guest_user_id with clerk_user_id
+    await supabase
+      .from('bill_members')
+      .update({ user_id: cid, guest_id: null })
+      .eq('guest_id', guestId);
+
+    // 2. Optionally, migrate other tables if guest had debts or expenses
+    await supabase
+      .from('expenses_involved')
+      .update({ bill_member_id: cid })  // adjust if needed
+      .eq('guest_id', guestId);
+
+    // 3. Delete guest_user row if no longer needed
+    await supabase
+      .from('guest_users')
+      .delete()
+      .eq('id', guestId);
+  };
 
   const validateForm = () => {
     let newErrors: Record<string, string> = {};
     if (validator.isEmpty(firstName.trim())) newErrors.firstName = "First name is required";
     if (validator.isEmpty(lastName.trim())) newErrors.lastName = "Last name is required";
     if (validator.isEmpty(nickname.trim())) {
-        newErrors.nickname = "Nickname is required";
+      newErrors.nickname = "Nickname is required";
     } else if (users.some(u => u.nickname?.toLowerCase() === nickname.toLowerCase())) {
-        newErrors.nickname = "Nickname is already taken";
+      newErrors.nickname = "Nickname is already taken";
     }
     if (validator.isEmpty(username.trim())) newErrors.username = "Username is required";
     if (validator.isEmpty(emailAddress.trim())) {
-        newErrors.email = "Email is required";
+      newErrors.email = "Email is required";
     } else if (!validator.isEmail(emailAddress.trim())) {
-        newErrors.email = "Invalid email format";
+      newErrors.email = "Invalid email format";
     }
     if (password.length < 8) newErrors.password = "Min 8 characters required";
     if (!validator.equals(confirmPassword, password)) newErrors.confirmPassword = "Passwords do not match";
@@ -173,20 +161,18 @@ export default function Page() {
       if (attempt.status === 'complete') {
         const clerkUserId = attempt.createdUserId
         await supabase.from('clerk_users').insert({ clerk_user_id: clerkUserId, nickname });
-        await supabase.from('user_has_roles').insert({clerk_user_id: attempt.createdUserId});
+        await supabase.from('user_has_roles').insert({ clerk_user_id: attempt.createdUserId });
         await transferGuestData(Number(gId), clerkUserId);
         await setActive({ session: attempt.createdSessionId });
         router.replace('/');
       }
-    } catch (err: any) { 
-        setClerkErrors(err);
-    } finally { 
-        setVerificationLoading(false); 
+    } catch (err: any) {
+      setClerkErrors(err);
+    } finally {
+      setVerificationLoading(false);
     }
   };
 
-<<<<<<< HEAD
-=======
   if (pendingVerification) {
     return (
       <ImageBackground source={require('../../assets/images/bg.jpg')} style={styles.background}>
@@ -204,15 +190,14 @@ export default function Page() {
     );
   }
 
-    
-      
 
->>>>>>> f9eb0463061c26231664425e7086cf53d4aeaf9f
+
+
   return (
     <ImageBackground source={require('../../assets/images/bg.jpg')} style={styles.background}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.overlay}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          
+
           <View style={styles.registerBox}>
             <Pressable style={styles.backButton} onPress={() => pendingVerification ? setPendingVerification(false) : router.back()}>
               <Ionicons name="chevron-back" size={28} color="#1C1C1E" />
@@ -257,7 +242,7 @@ export default function Page() {
             ) : (
               <>
                 <InputField label="Verification Code" value={code} onChange={setCode} error={errors.code} keyboard="numeric" />
-                
+
                 <Pressable style={styles.button} onPress={onVerifyPress}>
                   {verificationLoading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>Verify Account</ThemedText>}
                 </Pressable>
@@ -296,7 +281,7 @@ const styles = StyleSheet.create({
   backButton: { position: 'absolute', top: 20, left: 16, zIndex: 10, padding: 8 },
   title: { fontSize: 32, fontWeight: '900', color: '#1C1C1E', textAlign: 'center' },
   subtitle: { fontSize: 15, color: '#8E8E93', textAlign: 'center', marginTop: 4, fontWeight: '500' },
-  inputContainer: { width: '100%', marginBottom: 4 }, 
+  inputContainer: { width: '100%', marginBottom: 4 },
   inputWrapper: { position: 'relative', width: '100%', justifyContent: 'center' },
   row: { flexDirection: 'row', gap: 12, width: '100%' },
   flex1: { flex: 1 },
