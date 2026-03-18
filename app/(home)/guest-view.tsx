@@ -180,7 +180,7 @@ export default function GuestBillView() {
             <View style={styles.spacer} />
 
             <Pressable style={styles.modernSubmitBtn} onPress={() => setShowSignUpModal(true)}>
-              <ThemedText style={styles.submitBtnText}>Sign Up</ThemedText>
+              <ThemedText style={styles.submitBtnText}>Create Your Account</ThemedText>
             </Pressable>
           </View>
         )}

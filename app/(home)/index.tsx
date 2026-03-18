@@ -173,7 +173,7 @@ const handleRegisterGuest = () => {
 
           <SignedIn>
             <View style={styles.signedInContainer}>
-              <ThemedText style={styles.welcomeBack}>Welcome back, {user?.firstName || 'User'}!</ThemedText>
+              <ThemedText style={styles.welcomeBack}>Hello, {user?.firstName || 'User'}!</ThemedText>
               <Link href="/(dashboardpage)/dashboard" asChild>
                 <Pressable style={styles.primaryButtonLarge}>
                   <ThemedText style={styles.primaryButtonText}>Go to Dashboard</ThemedText>
