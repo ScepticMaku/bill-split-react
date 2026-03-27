@@ -1,35 +1,28 @@
-import { useAuth } from '@clerk/clerk-expo';
-import { Redirect, Stack } from 'expo-router';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { supabase } from '@/utils/supabase';
+import { router, Stack } from 'expo-router';
+import { useEffect } from 'react';
 
 export default function AuthRoutesLayout() {
-  const { isSignedIn, isLoaded } = useAuth()
 
-   if (!isLoaded) {
-      return  (
-        <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="tomato" />
-      </View>
-    );
+  useEffect(() => {
+    const getCurrentSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("error getting user session: ", error.message);
+        return;
+      }
+
+      if (data.session !== null) {
+        router.replace('/(dashboardpage)/dashboard')
+      }
     }
-    
-    if(isSignedIn) {
-      return <Redirect href='/(dashboardpage)/dashboard' />;
-    }
 
-  // if (isSignedIn) {
-  //   return <Redirect href={'/'} />
-  // }
+    getCurrentSession();
+  }, [])
 
-  return <Stack  screenOptions={{headerShown:false}}/>
+  return <Stack screenOptions={{ headerShown: false }} />
 
 }
 
-const styles = StyleSheet.create({
-   loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA', // Matches your main content area background
-  },
-})
+

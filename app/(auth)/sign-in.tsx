@@ -1,60 +1,73 @@
-import { useSignIn } from '@clerk/clerk-expo';
-import type { EmailCodeFactor } from '@clerk/types';
+// app/(auth)/sign-in.tsx
+// import { useAuth } from '@/utils/auth';
+import { ThemedText } from '@/components/themed-text';
+import { supabase } from '@/utils/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as React from 'react';
-import { ActivityIndicator, ImageBackground, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ImageBackground,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 export default function Login() {
-  const router = useRouter()
-  const { signIn, setActive, isLoaded } = useSignIn()
-  const [email, setEmail] = React.useState('') // Identifier
-  const [password, setPassword] = React.useState('')
-  const [isPasswordVisible, setIsPasswordVisible] = React.useState(false)
-  const [code, setCode] = React.useState('')
-  const [showEmailCode, setShowEmailCode] = React.useState(false)
-  const [clerkErrors, setClerkErrors] = React.useState<any>({})
-  const [loginLoading, setLoginloading] = React.useState(false)
-  const [verifyLoading, setVerifyLoading] = React.useState(false)
+  const router = useRouter();
+  // const { signIn, isLoading: authLoading } = useAuth();
 
-  let messages = clerkErrors.errors || []
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
+  const [code, setCode] = React.useState('');
+  const [showEmailCode, setShowEmailCode] = React.useState(false);
+  const [authError, setAuthError] = React.useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = React.useState(false);
+  const [verifyLoading, setVerifyLoading] = React.useState(false);
+  const [pendingMFA, setPendingMFA] = React.useState<{ email: string } | null>(null);
+  const [showModal, setShowModal] = React.useState(false)
 
-  const onSignInPress = React.useCallback(async () => {
-    if (!isLoaded) return
-    setLoginloading(true)
-    try {
-      const signInAttempt = await signIn.create({ identifier: email, password })
-      setLoginloading(false)
-      if (signInAttempt.status === 'complete') {
-        await setActive({
-          session: signInAttempt.createdSessionId,
-          navigate: async () => router.replace('/(dashboardpage)/dashboard'),
-        })
-      } else if (signInAttempt.status === 'needs_second_factor') {
-        const emailCodeFactor = signInAttempt.supportedSecondFactors?.find(
-          (factor): factor is EmailCodeFactor => factor.strategy === 'email_code'
-        )
-        if (emailCodeFactor) {
-          await signIn.prepareSecondFactor({ strategy: 'email_code', emailAddressId: emailCodeFactor.emailAddressId })
-          setShowEmailCode(true)
-        }
-      }
-    } catch (err) {
-      setLoginloading(false)
-      setClerkErrors(JSON.parse(JSON.stringify(err, null, 2)))
+  const resendEmailLink = async () => {
+    const { data, error } = await supabase.auth.resend({
+      email: email,
+      type: 'signup'
+    })
+
+    if (error) {
+      console.error('Error resending confirmation:', error.message)
     }
-  }, [isLoaded, signIn, setActive, router, email, password])
+  }
 
-  const onVerifyPress = React.useCallback(async () => {
-    if (!isLoaded) return
-    setVerifyLoading(true)
-    try {
-      const signInAttempt = await signIn.attemptSecondFactor({ strategy: 'email_code', code })
-      if (signInAttempt.status === 'complete') {
-        await setActive({ session: signInAttempt.createdSessionId, navigate: async () => router.replace('/(dashboardpage)/dashboard') })
-      } else { setVerifyLoading(false) }
-    } catch (err) { setVerifyLoading(false) }
-  }, [isLoaded, signIn, setActive, router, code])
+  const onSignInPress = async () => {
+    if (!email || !password) return;
+
+    setLoginLoading(true);
+    setAuthError(null);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    })
+
+    if (error?.code === 'email_not_confirmed') {
+      setShowModal(true)
+      resendEmailLink();
+      setLoginLoading(false);
+      return;
+    };
+
+    setLoginLoading(false);
+    router.replace("/(dashboardpage)/dashboard");
+  };
+
+  // const isSignInDisabled = !email || !password || loginLoading || authLoading;
 
   return (
     <View style={styles.mainContainer}>
@@ -63,43 +76,46 @@ export default function Login() {
         style={styles.backgroundImage}
         blurRadius={Platform.OS === 'ios' ? 10 : 5}
       >
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.overlay}
         >
           <View style={styles.glassBox}>
-            <Pressable 
-              style={styles.backButton} 
+            <Pressable
+              style={styles.backButton}
               onPress={() => router.replace('/')}
             >
               <Ionicons name="chevron-back" size={24} color="#1C1C1E" />
             </Pressable>
 
             <View style={styles.iconCircle}>
-               <Ionicons name="lock-open" size={30} color="tomato" />
+              <Ionicons name="lock-open" size={30} color="tomato" />
             </View>
-            
+
             <Text style={styles.title}>{showEmailCode ? "Verify Code" : "Welcome Back"}</Text>
             <Text style={styles.subtitle}>
               {showEmailCode ? "Check your inbox for a code" : "Log in to manage your bills"}
             </Text>
 
-            {messages.map((message: any, index: number) => (
-              <Text key={index} style={styles.errorMessage}>{message.longMessage}</Text>
-            ))}
+            {authError && (
+              <Text style={styles.errorMessage}>{authError}</Text>
+            )}
 
             {!showEmailCode ? (
               <>
                 <View style={styles.inputWrapper}>
-                  {/* ICON CHANGED TO PERSON-OUTLINE */}
                   <Ionicons name="mail-outline" size={20} color="#999" style={styles.inlineIcon} />
                   <TextInput
                     style={styles.input}
-                    placeholder="Email Address" // UPDATED PLACEHOLDER
+                    placeholder="Email Address"
                     placeholderTextColor="#999"
                     autoCapitalize="none"
+                    keyboardType="email-address"
+                    autoComplete="email"
+                    textContentType="emailAddress"
                     value={email}
                     onChangeText={setEmail}
+                    editable={!loginLoading}
                   />
                 </View>
 
@@ -112,12 +128,14 @@ export default function Login() {
                     secureTextEntry={!isPasswordVisible}
                     value={password}
                     onChangeText={setPassword}
+                    textContentType="password"
+                    editable={!loginLoading}
                   />
                   <Pressable onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
-                    <Ionicons 
-                      name={isPasswordVisible ? "eye-off-outline" : "eye-outline"} 
-                      size={20} 
-                      color="#999" 
+                    <Ionicons
+                      name={isPasswordVisible ? "eye-off-outline" : "eye-outline"}
+                      size={20}
+                      color="#999"
                     />
                   </Pressable>
                 </View>
@@ -127,11 +145,14 @@ export default function Login() {
                 </Pressable>
 
                 <Pressable
-                  style={[styles.button, (!email || !password) && styles.buttonDisabled]}
+                  style={styles.button}
                   onPress={onSignInPress}
-                  disabled={!email || !password || loginLoading}
                 >
-                  {loginLoading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Login</Text>}
+                  {loginLoading ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text style={styles.buttonText}>Login</Text>
+                  )}
                 </Pressable>
               </>
             ) : (
@@ -143,11 +164,32 @@ export default function Login() {
                     placeholder="0 0 0 0 0 0"
                     placeholderTextColor="#999"
                     keyboardType="numeric"
+                    maxLength={6}
                     onChangeText={setCode}
+                    editable={!verifyLoading}
                   />
                 </View>
-                <Pressable style={styles.button} onPress={onVerifyPress}>
-                   {verifyLoading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Verify</Text>}
+
+                <Pressable
+                  style={[styles.button, (!code || code.length < 6) && styles.buttonDisabled]}
+                  onPress={onVerifyPress}
+                  disabled={!code || code.length < 6 || verifyLoading}
+                >
+                  {verifyLoading ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text style={styles.buttonText}>Verify</Text>
+                  )}
+                </Pressable>
+
+                <Pressable onPress={onResendCode} style={styles.resendContainer}>
+                  <Text style={styles.footerText}>
+                    Didn't get a code? <Text style={styles.signUpLink}>Resend</Text>
+                  </Text>
+                </Pressable>
+
+                <Pressable onPress={() => setShowEmailCode(false)} style={styles.backToLoginContainer}>
+                  <Text style={styles.backToLoginText}>Back to login</Text>
                 </Pressable>
               </View>
             )}
@@ -159,9 +201,45 @@ export default function Login() {
             </Pressable>
           </View>
         </KeyboardAvoidingView>
+
+        <Modal
+          visible={showModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalIconContainer}>
+                <Ionicons name="mail" size={30} color="#FF3B30" />
+              </View>
+              <ThemedText style={styles.modalTitle}>Email not confirmed!</ThemedText>
+              <ThemedText style={styles.modalSubtitle}>Please check your inbox for your email confirmation link.</ThemedText>
+
+              <View style={styles.modalActionRow}>
+                {/* <TouchableOpacity
+                        style={styles.cancelBtn}
+                        onPress={() => setShowModal(false)}
+                      >
+                        <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
+                      </TouchableOpacity> */}
+
+                <TouchableOpacity
+                  style={styles.confirmBtn}
+                  onPress={async () => {
+                    setShowModal(false);
+
+                  }}
+                >
+                  <ThemedText style={styles.confirmBtnText}>Done</ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </ImageBackground>
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -235,10 +313,99 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 10,
   },
-  buttonDisabled: { backgroundColor: '#FFA08E' },
+  buttonDisabled: { backgroundColor: '#FFA08E', opacity: 0.7 },
   buttonText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  errorMessage: { color: '#FF3B30', fontSize: 13, marginBottom: 15, textAlign: 'center' },
+  errorMessage: {
+    color: '#FF3B30',
+    fontSize: 13,
+    marginBottom: 15,
+    textAlign: 'center',
+    backgroundColor: '#FFE5E5',
+    padding: 10,
+    borderRadius: 8,
+    width: '100%'
+  },
   signUpContainer: { marginTop: 25 },
   footerText: { fontSize: 14, color: '#666' },
   signUpLink: { color: 'tomato', fontWeight: '800' },
-})
+  resendContainer: { marginTop: 15 },
+  backToLoginContainer: { marginTop: 10 },
+  backToLoginText: { color: '#666', fontSize: 14, textAlign: 'center' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: 320,
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFF0EF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  modalActionRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: '#F2F2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#8E8E93',
+  },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF3B30',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  confirmBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+});

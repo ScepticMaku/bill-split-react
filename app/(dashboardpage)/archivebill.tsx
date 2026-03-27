@@ -1,22 +1,52 @@
+import { ErrorModal } from '@/components/error-modal';
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from "@/utils/supabase";
-import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function Archive() {
   const router = useRouter();
 
-  const { user } = useUser();
+  const [userId, setUserId] = useState('')
+  const [archiveLoading, setArchiveLoading] = useState(false)
   const [archivedBills, setArchivedBills] = useState([]);
 
+  const [errorModal, setErrorModal] = useState({
+    visible: false,
+    title: '',
+    message: '',
+  });
+
+  const showError = (title: string, message: string, icon: keyof typeof Ionicons.glyphMap = 'warning-outline') => {
+    setErrorModal({
+      visible: true,
+      title,
+      message,
+    });
+  };
+
+  useEffect(() => {
+    retrieveUser();
+  }, []);
+
+  useEffect(() => {
+    loadArchivedBills();
+  }, [userId]);
+
+  const retrieveUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    setUserId(user?.id)
+  }
+
   const loadArchivedBills = async () => {
+    setArchiveLoading(true);
+
     const { data, error } = await supabase
       .from("bills")
-      .select("*")
-      .eq("created_by", user?.id)
+      .select()
+      .eq("created_by", userId)
       .eq("status", "archived")
       .order("created_at", { ascending: false });
 
@@ -25,23 +55,29 @@ export default function Archive() {
     } else {
       console.error(error.message);
     }
+
+    setArchiveLoading(false);
   };
 
-  useEffect(() => {
-    loadArchivedBills();
-  }, []);
+
 
   const restoreBill = async (billId) => {
+    setArchiveLoading(true);
+
     const { error } = await supabase
       .from("bills")
       .update({ status: "active" })
       .eq("id", billId);
 
     if (error) {
-      alert(error.message);
+      showError(
+        "Error restoring bill",
+        error.message
+      )
       return;
     }
 
+    setArchiveLoading(false);
     loadArchivedBills();
   };
 
@@ -58,84 +94,98 @@ export default function Archive() {
         </View>
       </View>
 
-      <ScrollView 
-        contentContainerStyle={styles.scrollContainer} 
-        showsVerticalScrollIndicator={false}
-      >
-        {archivedBills.map(bill => (
-          <View key={bill.id} style={styles.billCard}>
-            <View style={styles.billHeader}>
-              <View style={styles.iconBg}>
-                <Ionicons name="archive" size={20} color="#8E8E93" />
-              </View>
-              
-              <View style={styles.billMainInfo}>
-                <ThemedText style={styles.billName}>{bill.name}</ThemedText>
-                <View style={styles.dateRow}>
-                  <Ionicons name="calendar-outline" size={12} color="#AEAEB2" />
-                  <ThemedText style={styles.billDate}>
-                    {new Date(bill.created_at).toLocaleDateString()}
-                  </ThemedText>
+      {archiveLoading == true ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color="tomato" />
+        </View>
+      ) : (
+
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {archivedBills.map(bill => (
+            <View key={bill.id} style={styles.billCard}>
+              <View style={styles.billHeader}>
+                <View style={styles.iconBg}>
+                  <Ionicons name="archive" size={20} color="#8E8E93" />
+                </View>
+
+                <View style={styles.billMainInfo}>
+                  <ThemedText style={styles.billName}>{bill.name}</ThemedText>
+                  <View style={styles.dateRow}>
+                    <Ionicons name="calendar-outline" size={12} color="#AEAEB2" />
+                    <ThemedText style={styles.billDate}>
+                      {new Date(bill.created_at).toLocaleDateString()}
+                    </ThemedText>
+                  </View>
+                </View>
+
+                <View style={styles.settledBadge}>
+                  <ThemedText style={styles.settledText}>{bill.status}</ThemedText>
                 </View>
               </View>
 
-              <View style={styles.settledBadge}>
-                <ThemedText style={styles.settledText}>{bill.status}</ThemedText>
+              <View style={styles.divider} />
+
+              <View style={styles.actionRow}>
+                <ThemedText style={styles.footerInfo}>Moved to archive on completion</ThemedText>
+                <View style={styles.buttonGroup}>
+                  <Pressable
+                    style={[styles.actionIcon, { backgroundColor: '#F2F2F7' }]}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/viewbill",
+                        params: { billId: bill.id, billName: bill.name },
+                      })
+                    }
+                  >
+                    <Ionicons name="eye" size={18} color="#666" />
+                  </Pressable>
+                  <Pressable
+                    style={[styles.actionIcon, { backgroundColor: '#FFF5F3' }]}
+                    onPress={() => restoreBill(bill.id)}
+                  >
+                    <Ionicons name="arrow-undo" size={18} color="tomato" />
+                  </Pressable>
+                </View>
               </View>
             </View>
+          ))}
 
-            <View style={styles.divider} />
-
-            <View style={styles.actionRow}>
-              <ThemedText style={styles.footerInfo}>Moved to archive on completion</ThemedText>
-              <View style={styles.buttonGroup}>
-                <Pressable
-                  style={[styles.actionIcon, { backgroundColor: '#F2F2F7' }]}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/viewbill",
-                      params: { billId: bill.id, billName: bill.name },
-                    })
-                  }
-                >
-                  <Ionicons name="eye" size={18} color="#666" />
-                </Pressable>
-                <Pressable
-                  style={[styles.actionIcon, { backgroundColor: '#FFF5F3' }]}
-                  onPress={() => restoreBill(bill.id)}
-                >
-                  <Ionicons name="arrow-undo" size={18} color="tomato" />
-                </Pressable>
+          {archivedBills.length === 0 && (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="briefcase-outline" size={60} color="#DDD" />
               </View>
+              <ThemedText style={styles.emptyText}>Archive is empty</ThemedText>
+              <ThemedText style={styles.emptySubtext}>Archived bills will appear here</ThemedText>
             </View>
-          </View>
-        ))}
+          )}
+        </ScrollView>
+      )}
 
-        {archivedBills.length === 0 && (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="briefcase-outline" size={60} color="#DDD" />
-            </View>
-            <ThemedText style={styles.emptyText}>Archive is empty</ThemedText>
-            <ThemedText style={styles.emptySubtext}>Archived bills will appear here</ThemedText>
-          </View>
-        )}
-      </ScrollView>
+      <ErrorModal
+        visible={errorModal.visible}
+        onClose={() => setErrorModal({ ...errorModal, visible: false })}
+        title={errorModal.title}
+        message={errorModal.message}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#F8F9FA', 
-    paddingTop: 60 
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+    paddingTop: 60
   },
-  contentHeader: { 
-    flexDirection: 'row', 
+  contentHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 25, 
-    marginBottom: 25 
+    paddingHorizontal: 25,
+    marginBottom: 25
   },
   backButton: {
     width: 40,
@@ -153,79 +203,79 @@ const styles = StyleSheet.create({
   titleContainer: {
     flex: 1,
   },
-  headerTitle: { 
-    fontSize: 28, 
-    fontWeight: '800', 
-    color: '#1C1C1E' 
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#1C1C1E'
   },
-  headerSubtitle: { 
-    fontSize: 14, 
-    color: '#8E8E93', 
-    marginTop: 2 
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginTop: 2
   },
-  scrollContainer: { 
-    paddingHorizontal: 20, 
-    paddingBottom: 40 
+  scrollContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 40
   },
-  billCard: { 
-    backgroundColor: '#fff', 
-    borderRadius: 22, 
-    padding: 18, 
-    marginBottom: 16, 
+  billCard: {
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 16,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12 },
       android: { elevation: 3 }
     })
   },
-  billHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center' 
+  billHeader: {
+    flexDirection: 'row',
+    alignItems: 'center'
   },
-  iconBg: { 
-    width: 46, 
-    height: 46, 
-    backgroundColor: '#F2F2F7', 
-    borderRadius: 14, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginRight: 12 
+  iconBg: {
+    width: 46,
+    height: 46,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
   },
-  billMainInfo: { 
-    flex: 1 
+  billMainInfo: {
+    flex: 1
   },
-  billName: { 
-    fontSize: 18, 
-    fontWeight: '700', 
-    color: '#1C1C1E' 
+  billName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1C1C1E'
   },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
   },
-  billDate: { 
-    fontSize: 13, 
-    color: '#AEAEB2' 
+  billDate: {
+    fontSize: 13,
+    color: '#AEAEB2'
   },
-  settledBadge: { 
-    backgroundColor: '#F2F2F7', 
-    paddingHorizontal: 10, 
-    paddingVertical: 5, 
-    borderRadius: 8 
+  settledBadge: {
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8
   },
-  settledText: { 
-    color: '#8E8E93', 
-    fontSize: 11, 
-    fontWeight: '800', 
-    textTransform: 'uppercase' 
+  settledText: {
+    color: '#8E8E93',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase'
   },
-  divider: { 
-    height: 1, 
-    backgroundColor: '#F8F9FA', 
-    marginVertical: 15 
+  divider: {
+    height: 1,
+    backgroundColor: '#F8F9FA',
+    marginVertical: 15
   },
-  actionRow: { 
-    flexDirection: 'row', 
+  actionRow: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
   },
@@ -237,17 +287,17 @@ const styles = StyleSheet.create({
   buttonGroup: {
     flexDirection: 'row',
   },
-  actionIcon: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 12, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginLeft: 10 
+  actionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10
   },
-  emptyState: { 
-    alignItems: 'center', 
-    marginTop: 80 
+  emptyState: {
+    alignItems: 'center',
+    marginTop: 80
   },
   emptyIconCircle: {
     width: 120,
@@ -258,14 +308,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20
   },
-  emptyText: { 
-    fontSize: 20, 
-    color: '#1C1C1E', 
-    fontWeight: '700' 
+  emptyText: {
+    fontSize: 20,
+    color: '#1C1C1E',
+    fontWeight: '700'
   },
-  emptySubtext: { 
-    fontSize: 15, 
-    color: '#AEAEB2', 
-    marginTop: 8 
+  emptySubtext: {
+    fontSize: 15,
+    color: '#AEAEB2',
+    marginTop: 8
   },
 });

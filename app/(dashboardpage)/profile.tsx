@@ -1,9 +1,8 @@
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from "@/utils/supabase";
-import { useClerk, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 // Memoized InputField component to prevent "letter by letter" issue
 const InputField = React.memo(({ label, value, onChangeText, icon, ...props }: any) => (
@@ -23,100 +22,100 @@ const InputField = React.memo(({ label, value, onChangeText, icon, ...props }: a
 ));
 
 export default function Profile() {
+
   const [lastName, setLastName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
-  const { user } = useUser();
-  const { openUserProfile } = useClerk();
-
-  // Load profile from Clerk + Supabase
-  const loadUserProfile = async () => {
-    if (!user) return;
-
-    const { data: supaData, error: supaError } = await supabase
-      .from("clerk_users")
-      .select("*")
-      .eq("clerk_user_id", user.id)
-      .single();
-
-    if (supaError) console.log("Supabase error:", supaError);
-
-    setFirstName(user.firstName || "");
-    setLastName(user.lastName || "");
-    setUsername(user.username || "");
-    setEmail(user.emailAddresses?.[0]?.emailAddress || "");
-    setNickname(supaData?.nickname || "");
-  };
+  const [user, setUser] = useState([]);
+  const [userLoading, setUserLoading] = useState(false);
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false)
 
   useEffect(() => {
-    loadUserProfile();
-  }, [user]);
+    retrieveUser();
+  }, [])
+
+  const retrieveUser = async () => {
+    setUserLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    setFirstName(user?.user_metadata?.first_name || "");
+    setLastName(user?.user_metadata?.last_name || "");
+    setUsername(user?.user_metadata?.username || "");
+    setEmail(user?.user_metadata?.email || "");
+    setNickname(user?.user_metadata?.nickname || "");
+    setUserLoading(false);
+  }
 
   // Save firstName, lastName, nickname
   const handleSaveChanges = async () => {
-    if (!user) return;
+    setUpdateLoading(true);
+    const { data, error } = await supabase.auth.updateUser({
+      email: email,
+      data: { first_name: firstName, last_name: lastName, nickname: nickname, username: username }
+    })
 
-    try {
-      await user.update({ firstName, lastName });
-
-      const { error } = await supabase
-        .from("clerk_users")
-        .update({ nickname })
-        .eq("clerk_user_id", user.id);
-
-      if (error) throw error;
-
-      alert("Profile updated successfully!");
-    } catch (err: any) {
-      console.log("Update error:", err);
-      alert(err?.message || "Something went wrong");
+    if (error) {
+      console.error(error.message);
+      setUpdateLoading(false);
+      return;
     }
+
+    setSaveSuccess(true);
+    setUpdateLoading(false);
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View style={styles.headerSection}>
-        <View>
-          <ThemedText style={styles.headerTitle}>Account Settings</ThemedText>
-          <ThemedText style={styles.headerSubtitle}>Update your personal information and security</ThemedText>
-        </View>
-      </View>
+    <>
+      {userLoading == true ? (
+        <ActivityIndicator style={styles.activityIndicator} size="large" color="tomato" />
+      ) : (
 
-      {/* Personal Info */}
-      <View style={styles.card}>
-        <ThemedText style={styles.cardTitle}>Personal Information</ThemedText>
-        <View style={styles.row}>
-          <View style={{ flex: 1, marginRight: 10 }}>
-            <InputField label="First Name" value={firstName} onChangeText={setFirstName} icon="person-outline" />
+        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.headerSection}>
+            <View>
+              <ThemedText style={styles.headerTitle}>Account Settings</ThemedText>
+              <ThemedText style={styles.headerSubtitle}>Update your personal information and security</ThemedText>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <InputField label="Last Name" value={lastName} onChangeText={setLastName} icon="person-outline" />
+
+
+          {/* Personal Info */}
+          <View style={styles.card}>
+            <ThemedText style={styles.cardTitle}>Personal Information</ThemedText>
+            <View style={styles.row}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <InputField label="First Name" value={firstName} onChangeText={setFirstName} icon="person-outline" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <InputField label="Last Name" value={lastName} onChangeText={setLastName} icon="person-outline" />
+              </View>
+            </View>
+            <InputField label="Nickname" value={nickname} onChangeText={setNickname} icon="happy-outline" />
           </View>
-        </View>
-        <InputField label="Nickname" value={nickname} onChangeText={setNickname} icon="happy-outline" />
-      </View>
 
-      {/* Account Details */}
-      <View style={styles.card}>
-        <ThemedText style={styles.cardTitle}>Account Details</ThemedText>
-        <InputField label="Email Address" value={email} editable={false} />
-        <InputField label="Username" value={username} editable={false} />
-        <Pressable onPress={() => openUserProfile()} style={{ marginTop: 8 }}>
-          <Text style={{ color: "blue" }}>Change Username / Password</Text>
-        </Pressable>
-      </View>
+          {/* Account Details */}
+          <View style={styles.card}>
+            <ThemedText style={styles.cardTitle}>Account Details</ThemedText>
+            <InputField label="Email Address" value={email} onChangeText={setEmail} />
+            <InputField label="Username" value={username} onChangeText={setUsername} />
+          </View>
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Pressable style={styles.saveButton} onPress={handleSaveChanges}>
-          <ThemedText style={styles.saveButtonText}>Save Changes</ThemedText>
-        </Pressable>
-        
-      </View>
-    </ScrollView>
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Pressable style={styles.saveButton} onPress={handleSaveChanges}>
+              <ThemedText style={styles.saveButtonText}>{updateLoading ? <ActivityIndicator color="white" /> : "Save Changes"}</ThemedText>
+            </Pressable>
+            {saveSuccess && (<Text style={styles.success}>Successfuly saved changes!</Text>)}
+
+          </View>
+        </ScrollView >
+      )
+      }
+    </>
   );
 }
 
@@ -134,7 +133,9 @@ const styles = StyleSheet.create({
   inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F2F2F7', borderRadius: 12, paddingHorizontal: 12, height: 50 },
   inputIcon: { marginRight: 10 },
   input: { flex: 1, fontSize: 15, color: '#1C1C1E' },
-  footer: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  footer: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 10 },
   saveButton: { backgroundColor: '#1C1C1E', paddingVertical: 16, paddingHorizontal: 30, borderRadius: 14, alignItems: 'center' },
   saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  activityIndicator: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  success: { color: 'green' }
 });

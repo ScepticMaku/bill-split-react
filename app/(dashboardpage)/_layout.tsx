@@ -1,45 +1,47 @@
+// app/(dashboardpage)/_layout.tsx
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/utils/supabase';
-import { useAuth, useUser } from '@clerk/clerk-expo';
+// import { useAuth } from '@/utils/auth'; // Changed from Clerk import
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, Slot, usePathname, useRouter } from 'expo-router';
+import { Slot, usePathname, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function DashboardLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const [userRole, setUserRole] = useState('');
-  const [showLogoutModal, setShowLogoutModal] = useState(false); // NEW: Modal state
-  const { signOut, isLoaded, isSignedIn } = useAuth();
-  const { user } = useUser();
-
-  const fetchUserRole = async () => {
-    if (!user?.id) return;
-    const { data, error } = await supabase
-      .from('user_has_roles')
-      .select(`*, roles:role_id ( name )`)
-      .eq('clerk_user_id', user?.id);
-
-    if (!error && data && data.length > 0) {
-      setUserRole(data[0]?.roles.name);
-    }
-  };
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [firstName, setFirstName] = useState('')
 
   useEffect(() => {
-    fetchUserRole();
-  }, [user?.id]);
+    fetchUser()
+  }, [])
 
-  if (!isLoaded) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="tomato" />
-      </View>
-    );
+  const fetchUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: roleData, error } = await supabase
+      .from('user_has_roles')
+      .select(`roles:role_id (name)`)
+      .eq('auth_user_id', user?.id)
+      .single()
+
+
+    console.log("user: ", user?.id)
+
+    setUserRole(roleData?.roles?.name)
+    setFirstName(user?.user_metadata?.first_name)
   }
 
-  if (!isSignedIn) {
-    return <Redirect href='/(auth)/sign-in' />;
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error(error.message);
+      return;
+    }
+
+    router.replace('/')
   }
 
   const NavItem = ({ name, icon, path }: { name: string; icon: any; path: string }) => {
@@ -84,8 +86,8 @@ export default function DashboardLayout() {
 
         <View>
           {isStandard && (
-            <Pressable 
-              style={styles.upgradeCard} 
+            <Pressable
+              style={styles.upgradeCard}
               onPress={() => router.push('/(dashboardpage)/upgrade' as any)}
             >
               <View style={styles.upgradeIconCircle}>
@@ -100,7 +102,8 @@ export default function DashboardLayout() {
             <View style={styles.userCard}>
               <View style={styles.userInfo}>
                 <ThemedText style={styles.userName} numberOfLines={1}>
-                  {user?.firstName || 'User'}
+                  {firstName}
+                  {/* {user?.first_name || user?.firstName || 'User'} Handle both naming conventions */}
                 </ThemedText>
                 <View style={[styles.roleBadge, isPremium && styles.roleBadgePremium]}>
                   <ThemedText style={[styles.roleText, isPremium && styles.roleTextPremium]}>
@@ -132,28 +135,29 @@ export default function DashboardLayout() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalIconContainer}>
-                <Ionicons name="log-out" size={30} color="#FF3B30" />
+              <Ionicons name="log-out" size={30} color="#FF3B30" />
             </View>
             <ThemedText style={styles.modalTitle}>Confirm Logout</ThemedText>
             <ThemedText style={styles.modalSubtitle}>Are you sure you want to log out of your account?</ThemedText>
-            
+
             <View style={styles.modalActionRow}>
-                <TouchableOpacity 
-                    style={styles.cancelBtn} 
-                    onPress={() => setShowLogoutModal(false)}
-                >
-                    <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                    style={styles.confirmBtn} 
-                    onPress={() => {
-                        setShowLogoutModal(false);
-                        signOut();
-                    }}
-                >
-                    <ThemedText style={styles.confirmBtnText}>Logout</ThemedText>
-                </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setShowLogoutModal(false)}
+              >
+                <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmBtn}
+                onPress={async () => {
+                  setShowLogoutModal(false);
+                  await signOut(); // Call your custom signOut
+                  // The redirect will happen automatically due to the !user check above
+                }}
+              >
+                <ThemedText style={styles.confirmBtnText}>Logout</ThemedText>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -162,6 +166,7 @@ export default function DashboardLayout() {
   );
 }
 
+// Styles remain exactly the same - no changes needed
 const styles = StyleSheet.create({
   mainContainer: { flex: 1, flexDirection: 'row' },
   sidebar: {
@@ -190,7 +195,7 @@ const styles = StyleSheet.create({
   navText: { fontSize: 16, fontWeight: '500', color: '#8E8E93' },
   navTextActive: { color: '#1C1C1E', fontWeight: '700' },
   activeIndicator: { position: 'absolute', right: -20, width: 4, height: 20, backgroundColor: 'tomato', borderTopLeftRadius: 4, borderBottomLeftRadius: 4 },
-  
+
   upgradeCard: {
     backgroundColor: '#FFF5F3',
     padding: 16,
@@ -212,7 +217,7 @@ const styles = StyleSheet.create({
   userName: { fontSize: 15, fontWeight: '600', color: '#1C1C1E' },
   roleBadge: { alignSelf: 'flex-start', backgroundColor: '#F2F2F7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
   roleText: { fontSize: 10, fontWeight: '800', color: '#8E8E93', letterSpacing: 0.5 },
-  
+
   roleBadgePremium: { backgroundColor: '#FFF9E6', borderWidth: 1, borderColor: '#FFEBB2' },
   roleTextPremium: { color: '#FFB800' },
 
@@ -260,35 +265,32 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 20,
   },
-  // ... rest of your styles
-
   modalActionRow: {
     flexDirection: 'row',
-    width: '100%',       // Ensure the row takes full width of the container
+    width: '100%',
     gap: 12,
-    marginTop: 8,       // Adds breathing room between the subtitle and the buttons
+    marginTop: 8,
   },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 16, // Increased padding for a better tap target
+    paddingVertical: 16,
     borderRadius: 16,
     backgroundColor: '#F2F2F7',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelBtnText: {
-    fontSize: 16,       // Slightly larger text
+    fontSize: 16,
     fontWeight: '700',
     color: '#8E8E93',
   },
   confirmBtn: {
     flex: 1,
-    paddingVertical: 16, // Increased padding
+    paddingVertical: 16,
     borderRadius: 16,
     backgroundColor: '#FF3B30',
     alignItems: 'center',
     justifyContent: 'center',
-    // Added a subtle shadow to the primary action button
     shadowColor: '#FF3B30',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,

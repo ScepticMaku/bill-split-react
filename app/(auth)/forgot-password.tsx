@@ -1,4 +1,4 @@
-import { useSignIn } from '@clerk/clerk-expo';
+import { supabase } from '@/utils/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as React from 'react';
@@ -15,10 +15,8 @@ import {
   TextInput,
   View
 } from 'react-native';
-import validator from 'validator';
 
 export default function ForgotPassword() {
-  const { signIn, setActive, isLoaded } = useSignIn();
   const router = useRouter();
 
   // --- States ---
@@ -26,7 +24,7 @@ export default function ForgotPassword() {
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
   const [code, setCode] = React.useState('');
-  
+
   // UI Flow States
   const [stage, setStage] = React.useState<'email' | 'code' | 'password'>('email');
   const [showSentModal, setShowSentModal] = React.useState(false);
@@ -39,26 +37,23 @@ export default function ForgotPassword() {
   let messages = clerkErrors.errors || [];
 
   // --- Actions ---
-  
+
   // 1. Request Code
   const onRequestReset = async () => {
-    if (!isLoaded) return;
-    let errs = {} as any;
-    if (!validator.isEmail(email)) errs.email = "Please enter a valid email";
-    if (Object.keys(errs).length > 0) return setErrors(errs);
-
     setLoading(true);
-    try {
-      await signIn!.create({
-        strategy: 'reset_password_email_code',
-        identifier: email,
-      });
-      setShowSentModal(true);
-    } catch (err: any) {
-      setClerkErrors(err);
-    } finally {
+
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'http://localhost:8081/reset-password'
+    })
+
+    if (error) {
+      console.error('Reset password error: ', error.message);
       setLoading(false);
+      return;
     }
+
+    setShowSentModal(true)
+    setLoading(false);
   };
 
   // 2. Verify Code only (We use a dummy password to "check" the code via Clerk or just handle locally)
@@ -73,37 +68,11 @@ export default function ForgotPassword() {
     setShowVerifiedModal(true);
   };
 
-  // 3. Final Reset
-  const onResetSubmit = async () => {
-    if (!isLoaded) return;
-    let errs = {} as any;
-    if (password.length < 8) errs.password = "Min 8 characters required";
-    if (password !== confirmPassword) errs.confirm = "Passwords do not match";
-    if (Object.keys(errs).length > 0) return setErrors(errs);
-
-    setLoading(true);
-    try {
-      const result = await signIn!.attemptFirstFactor({
-        strategy: 'reset_password_email_code',
-        code,
-        password,
-      });
-      if (result.status === 'complete') {
-        await setActive!({ session: result.createdSessionId });
-        router.replace('/');
-      }
-    } catch (err: any) {
-      setClerkErrors(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <View style={styles.mainContainer}>
       <ImageBackground source={require('../../assets/images/bg.jpg')} style={styles.backgroundImage}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.overlay}>
-          
+
           {/* MODAL 1: CODE SENT */}
           <Modal visible={showSentModal} transparent animationType="fade">
             <View style={styles.modalOverlay}>
@@ -112,25 +81,9 @@ export default function ForgotPassword() {
                   <Ionicons name="mail-unread" size={40} color="tomato" />
                 </View>
                 <Text style={styles.modalTitle}>Code Sent!</Text>
-                <Text style={styles.modalSubtitle}>Check your inbox for the reset code.</Text>
-                <Pressable style={styles.modalButton} onPress={() => { setShowSentModal(false); setStage('code'); }}>
-                  <Text style={styles.modalButtonText}>Enter Code</Text>
-                </Pressable>
-              </View>
-            </View>
-          </Modal>
-
-          {/* MODAL 2: CODE VERIFIED */}
-          <Modal visible={showVerifiedModal} transparent animationType="fade">
-            <View style={styles.modalOverlay}>
-              <View style={styles.modernModal}>
-                <View style={[styles.iconCircle, { backgroundColor: '#E8F5E9' }]}>
-                  <Ionicons name="checkmark-circle" size={40} color="#2E7D32" />
-                </View>
-                <Text style={styles.modalTitle}>Verified!</Text>
-                <Text style={styles.modalSubtitle}>Code accepted. Now create your new password.</Text>
-                <Pressable style={[styles.modalButton, { backgroundColor: '#1C1C1E' }]} onPress={() => { setShowVerifiedModal(false); setStage('password'); }}>
-                  <Text style={styles.modalButtonText}>Set Password</Text>
+                <Text style={styles.modalSubtitle}>Check your inbox for the reset link.</Text>
+                <Pressable style={styles.modalButton} onPress={() => { setShowSentModal(false); router.replace('/(auth)/sign-in'); }}>
+                  <Text style={styles.modalButtonText}>Continue</Text>
                 </Pressable>
               </View>
             </View>
@@ -151,9 +104,9 @@ export default function ForgotPassword() {
                 <Text style={styles.subtitle}>Enter your email to receive a code.</Text>
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Email Address</Text>
-                  <TextInput 
-                    style={[styles.input, errors.email && styles.inputError]} 
-                    placeholder="name@example.com" 
+                  <TextInput
+                    style={[styles.input, errors.email && styles.inputError]}
+                    placeholder="name@example.com"
                     placeholderTextColor="#AEAEB2"
                     keyboardType="email-address"
                     autoCapitalize="none"
@@ -163,7 +116,7 @@ export default function ForgotPassword() {
                   {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
                 </View>
                 <Pressable style={styles.primaryButton} onPress={onRequestReset}>
-                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Send Code</Text>}
+                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Submit</Text>}
                 </Pressable>
               </View>
             )}
@@ -174,9 +127,9 @@ export default function ForgotPassword() {
                 <Text style={styles.subtitle}>We sent a 6-digit code to your email.</Text>
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Verification Code</Text>
-                  <TextInput 
-                    style={[styles.input, (errors.code || messages.length > 0) && styles.inputError]} 
-                    placeholder="" 
+                  <TextInput
+                    style={[styles.input, (errors.code || messages.length > 0) && styles.inputError]}
+                    placeholder=""
                     keyboardType="numeric"
                     maxLength={6}
                     value={code}
@@ -195,7 +148,7 @@ export default function ForgotPassword() {
               <ScrollView showsVerticalScrollIndicator={false} style={styles.fullWidth}>
                 <Text style={styles.title}>New Password</Text>
                 <Text style={styles.subtitle}>Secure your account with a new password.</Text>
-                
+
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>New Password</Text>
                   <TextInput style={[styles.input, errors.password && styles.inputError]} placeholder="••••••••" secureTextEntry value={password} onChangeText={setPassword} />
