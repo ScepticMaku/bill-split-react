@@ -2,19 +2,23 @@ import { ThemedText } from '@/components/themed-text';
 import { supabase } from "@/utils/supabase";
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-// Memoized InputField component to prevent "letter by letter" issue
-const InputField = React.memo(({ label, value, onChangeText, icon, ...props }: any) => (
+// Memoized InputField component with disabled state support
+const InputField = React.memo(({ label, value, onChangeText, icon, editable = true, ...props }: any) => (
   <View style={styles.inputWrapper}>
     <ThemedText style={styles.label}>{label}</ThemedText>
-    <View style={styles.inputContainer}>
-      {icon && <Ionicons name={icon} size={18} color="#AEAEB2" style={styles.inputIcon} />}
+    <View style={[
+      styles.inputContainer, 
+      !editable && { backgroundColor: '#E5E5EA', opacity: 0.8 }
+    ]}>
+      {icon && <Ionicons name={icon} size={18} color={editable ? "#AEAEB2" : "#8E8E93"} style={styles.inputIcon} />}
       <TextInput
-        style={styles.input}
+        style={[styles.input, !editable && { color: '#8E8E93' }]}
         value={value}
         onChangeText={onChangeText}
         placeholderTextColor="#C7C7CC"
+        editable={editable}
         {...props}
       />
     </View>
@@ -22,107 +26,157 @@ const InputField = React.memo(({ label, value, onChangeText, icon, ...props }: a
 ));
 
 export default function Profile() {
-
   const [lastName, setLastName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
-  const [user, setUser] = useState([]);
+  
   const [userLoading, setUserLoading] = useState(false);
   const [updateLoading, setUpdateLoading] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     retrieveUser();
-  }, [])
+  }, []);
 
   const retrieveUser = async () => {
     setUserLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-
-    setFirstName(user?.user_metadata?.first_name || "");
-    setLastName(user?.user_metadata?.last_name || "");
-    setUsername(user?.user_metadata?.username || "");
-    setEmail(user?.user_metadata?.email || "");
-    setNickname(user?.user_metadata?.nickname || "");
-    setUserLoading(false);
-  }
-
-  // Save firstName, lastName, nickname
-  const handleSaveChanges = async () => {
-    setUpdateLoading(true);
-    const { data, error } = await supabase.auth.updateUser({
-      email: email,
-      data: { first_name: firstName, last_name: lastName, nickname: nickname, username: username }
-    })
-
-    if (error) {
-      console.error(error.message);
-      setUpdateLoading(false);
-      return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        setFirstName(user.user_metadata?.first_name || "");
+        setLastName(user.user_metadata?.last_name || "");
+        setUsername(user.user_metadata?.username || "");
+        setEmail(user.email || ""); // Use direct email field from user object
+        setNickname(user.user_metadata?.nickname || "");
+      }
+    } catch (error) {
+      console.error("Error fetching user:", error);
+    } finally {
+      setUserLoading(false);
     }
-
-    setSaveSuccess(true);
-    setUpdateLoading(false);
   };
 
+  const handleSaveChanges = async () => {
+    setUpdateLoading(true);
+    setSaveSuccess(false);
+
+    try {
+      // 1. Get the current user ID
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No user found");
+
+      // 2. Update the Database Table (The "Public" Truth)
+      const { error: dbError } = await supabase
+        .from('users') // Your table name
+        .update({ 
+          first_name: firstName, 
+          last_name: lastName, 
+          nickname: nickname, 
+          username: username 
+        })
+        .eq('auth_user_id', user.id); // Matches the user record
+
+      if (dbError) throw dbError;
+
+      // 3. Update Auth Metadata (The "Session" Truth)
+      const { error: authError } = await supabase.auth.updateUser({
+        data: { 
+          first_name: firstName, 
+          last_name: lastName, 
+          nickname: nickname, 
+          username: username 
+        }
+      });
+
+      if (authError) throw authError;
+
+      // Success!
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+
+    } catch (error: any) {
+      Alert.alert("Update Failed", error.message);
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
+  if (userLoading) {
+    return <ActivityIndicator style={styles.activityIndicator} size="large" color="tomato" />;
+  }
+
   return (
-    <>
-      {userLoading == true ? (
-        <ActivityIndicator style={styles.activityIndicator} size="large" color="tomato" />
-      ) : (
+    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Header */}
+      <View style={styles.headerSection}>
+        <View>
+          <ThemedText style={styles.headerTitle}>Account Settings</ThemedText>
+          <ThemedText style={styles.headerSubtitle}>Update your personal information</ThemedText>
+        </View>
+      </View>
 
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-          {/* Header */}
-          <View style={styles.headerSection}>
-            <View>
-              <ThemedText style={styles.headerTitle}>Account Settings</ThemedText>
-              <ThemedText style={styles.headerSubtitle}>Update your personal information and security</ThemedText>
-            </View>
+      {/* Personal Info */}
+      <View style={styles.card}>
+        <ThemedText style={styles.cardTitle}>Personal Information</ThemedText>
+        <View style={styles.row}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <InputField label="First Name" value={firstName} onChangeText={setFirstName} icon="person-outline" />
           </View>
-
-
-          {/* Personal Info */}
-          <View style={styles.card}>
-            <ThemedText style={styles.cardTitle}>Personal Information</ThemedText>
-            <View style={styles.row}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <InputField label="First Name" value={firstName} onChangeText={setFirstName} icon="person-outline" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <InputField label="Last Name" value={lastName} onChangeText={setLastName} icon="person-outline" />
-              </View>
-            </View>
-            <InputField label="Nickname" value={nickname} onChangeText={setNickname} icon="happy-outline" />
+          <View style={{ flex: 1 }}>
+            <InputField label="Last Name" value={lastName} onChangeText={setLastName} icon="person-outline" />
           </View>
+        </View>
+        <InputField label="Nickname" value={nickname} onChangeText={setNickname} icon="happy-outline" />
+      </View>
 
-          {/* Account Details */}
-          <View style={styles.card}>
-            <ThemedText style={styles.cardTitle}>Account Details</ThemedText>
-            <InputField label="Email Address" value={email} onChangeText={setEmail} />
-            <InputField label="Username" value={username} onChangeText={setUsername} />
+      {/* Account Details */}
+      <View style={styles.card}>
+        <ThemedText style={styles.cardTitle}>Account Details</ThemedText>
+        <InputField 
+          label="Email Address (Locked)" 
+          value={email} 
+          editable={false} 
+          icon="mail-outline" 
+        />
+        <InputField 
+          label="Username" 
+          value={username} 
+          onChangeText={setUsername} 
+          icon="at-outline" 
+        />
+      </View>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Pressable 
+          style={[styles.saveButton, updateLoading && { opacity: 0.7 }]} 
+          onPress={handleSaveChanges}
+          disabled={updateLoading}
+        >
+          {updateLoading ? (
+            <ActivityIndicator color="white" size="small" />
+          ) : (
+            <ThemedText style={styles.saveButtonText}>Save Changes</ThemedText>
+          )}
+        </Pressable>
+        
+        {saveSuccess && (
+          <View style={styles.successContainer}>
+            <Ionicons name="checkmark-circle" size={18} color="green" />
+            <Text style={styles.success}> Changes saved!</Text>
           </View>
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Pressable style={styles.saveButton} onPress={handleSaveChanges}>
-              <ThemedText style={styles.saveButtonText}>{updateLoading ? <ActivityIndicator color="white" /> : "Save Changes"}</ThemedText>
-            </Pressable>
-            {saveSuccess && (<Text style={styles.success}>Successfuly saved changes!</Text>)}
-
-          </View>
-        </ScrollView >
-      )
-      }
-    </>
+        )}
+      </View>
+    </ScrollView>
   );
 }
 
-// Styles
 const styles = StyleSheet.create({
-  container: { padding: 40, backgroundColor: '#F8F9FA' },
-  headerSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 30 },
+  container: { padding: 24, backgroundColor: '#F8F9FA', paddingBottom: 60 },
+  headerSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 30, marginTop: 20 },
   headerTitle: { fontSize: 28, fontWeight: '800', color: '#1C1C1E' },
   headerSubtitle: { fontSize: 14, color: '#8E8E93', marginTop: 4 },
   card: { backgroundColor: '#fff', borderRadius: 20, padding: 24, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 15, elevation: 2 },
@@ -133,9 +187,10 @@ const styles = StyleSheet.create({
   inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F2F2F7', borderRadius: 12, paddingHorizontal: 12, height: 50 },
   inputIcon: { marginRight: 10 },
   input: { flex: 1, fontSize: 15, color: '#1C1C1E' },
-  footer: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 10 },
-  saveButton: { backgroundColor: '#1C1C1E', paddingVertical: 16, paddingHorizontal: 30, borderRadius: 14, alignItems: 'center' },
+  footer: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 15 },
+  saveButton: { backgroundColor: '#1C1C1E', paddingVertical: 16, paddingHorizontal: 30, borderRadius: 14, alignItems: 'center', minWidth: 150 },
   saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   activityIndicator: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  success: { color: 'green' }
+  successContainer: { flexDirection: 'row', alignItems: 'center' },
+  success: { color: 'green', fontWeight: '600' }
 });

@@ -33,6 +33,7 @@ export default function Login() {
   const [verifyLoading, setVerifyLoading] = React.useState(false);
   const [pendingMFA, setPendingMFA] = React.useState<{ email: string } | null>(null);
   const [showModal, setShowModal] = React.useState(false)
+  const [errors, setErrors] = React.useState<{ email?: string; password?: string }>({});
 
   const resendEmailLink = async () => {
     const { data, error } = await supabase.auth.resend({
@@ -46,19 +47,45 @@ export default function Login() {
   }
 
   const onSignInPress = async () => {
-    if (!email || !password) return;
-
-    setLoginLoading(true);
+    // 1. Reset all error states at the start of the click
+    setErrors({});
     setAuthError(null);
+
+    let valid = true;
+    const newErrors: { email?: string; password?: string } = {};
+
+    // 2. Local Validation Checks
+    if (!email) {
+      newErrors.email = "Email is required";
+      valid = false;
+    }
+    if (!password) {
+      newErrors.password = "Password is required";
+      valid = false;
+    }
+
+    // 3. Stop if validation fails
+    if (!valid) {
+      setErrors(newErrors);
+      return; 
+    }
+
+    // 4. If valid, proceed to Supabase
+    setLoginLoading(true);
 
     const { error } = await supabase.auth.signInWithPassword({
       email: email,
       password: password,
-    })
+    });
 
-    if (error?.code === 'email_not_confirmed') {
-      setShowModal(true)
-      resendEmailLink();
+    if (error) {
+      if (error.code === 'email_not_confirmed') {
+        setShowModal(true);
+        // We removed auto-resend here to prevent rate limits!
+      } else {
+        // Handle "Invalid login credentials" etc.
+        setAuthError(error.message);
+      }
       setLoginLoading(false);
       return;
     };
@@ -103,42 +130,51 @@ export default function Login() {
 
             {!showEmailCode ? (
               <>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="mail-outline" size={20} color="#999" style={styles.inlineIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Email Address"
-                    placeholderTextColor="#999"
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    autoComplete="email"
-                    textContentType="emailAddress"
-                    value={email}
-                    onChangeText={setEmail}
-                    editable={!loginLoading}
-                  />
-                </View>
+                {/* Email Input Section */}
+            <View style={[styles.inputWrapper, errors.email && { borderColor: '#FF3B30' }]}>
+              <Ionicons name="mail-outline" size={20} color="#999" style={styles.inlineIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email Address"
+                placeholderTextColor="#999"
+                                autoCapitalize="none"
+                                keyboardType="email-address"
+                                autoComplete="email"
+                                textContentType="emailAddress"
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (errors.email) setErrors({ ...errors, email: undefined });
+                }}
+                editable={!loginLoading}
+              />
+            </View>
+            {errors.email && <Text style={styles.errorTextSmall}>{errors.email}</Text>}
 
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inlineIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Password"
-                    placeholderTextColor="#999"
-                    secureTextEntry={!isPasswordVisible}
-                    value={password}
-                    onChangeText={setPassword}
-                    textContentType="password"
-                    editable={!loginLoading}
-                  />
-                  <Pressable onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
-                    <Ionicons
-                      name={isPasswordVisible ? "eye-off-outline" : "eye-outline"}
-                      size={20}
-                      color="#999"
-                    />
-                  </Pressable>
-                </View>
+            {/* Password Input Section */}
+            <View style={[styles.inputWrapper, errors.password && { borderColor: '#FF3B30' }]}>
+              <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inlineIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor="#999"
+                secureTextEntry={!isPasswordVisible}
+                value={password}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (errors.password) setErrors({ ...errors, password: undefined });
+                }}
+                editable={!loginLoading}
+              />
+              <Pressable onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
+                                <Ionicons
+                                  name={isPasswordVisible ? "eye-off-outline" : "eye-outline"}
+                                  size={20}
+                                  color="#999"
+                                />
+                              </Pressable>
+            </View>
+            {errors.password && <Text style={styles.errorTextSmall}>{errors.password}</Text>}
 
                 <Pressable onPress={() => router.push('/forgot-password')} style={styles.forgotBtn}>
                   <Text style={styles.forgotText}>Forgot Password?</Text>
@@ -407,5 +443,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFF',
+  },
+  errorTextSmall: {
+    color: '#FF3B30',
+    fontSize: 12,
+    marginTop: -10, // Pulls the error up closer to the input box
+    marginBottom: 10,
+    alignSelf: 'flex-start',
+    marginLeft: 5,
   },
 });

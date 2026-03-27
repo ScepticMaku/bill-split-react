@@ -565,24 +565,38 @@ export default function ViewBill() {
     fetchBillData();
   }, [billId]);
 
-  const handleAddExpense = async () => {
+const handleAddExpense = async () => {
     const totalCost = parseFloat(expCost);
-    if (!expName || isNaN(totalCost)) return;
+    
+    // 1. Stricter Validation
+    // Checks: Name exists, Cost is a valid positive number, and at least one person is involved
+    if (!expName.trim()) {
+      showError("Missing Info", "Please enter an expense name.");
+      return;
+    }
+    if (isNaN(totalCost) || totalCost <= 0) {
+      showError("Invalid Cost", "Please enter a valid amount greater than 0.");
+      return;
+    }
+    if (selectedInvolved.length === 0) {
+      showError("Who's involved?", "Please select at least one person to split with.");
+      return;
+    }
 
     setIsLoading(true);
 
+    // 2. Safe Calculation
     const finalInvolved = selectedInvolved.map(id => ({
       guestId: id,
-      amount: customAmounts[id] || (totalCost / selectedInvolved.length).toString()
+      amount: customAmounts[id] || (totalCost / selectedInvolved.length).toFixed(2) // Limit to 2 decimal places
     }));
 
     try {
-      // Insert expense
       const { data, error: addExpenseError } = await supabase
         .from('expenses')
         .insert([{
           bill_id: billId,
-          name: expName,
+          name: expName.trim(), // Trim whitespace
           cost: totalCost,
           paid_by: expPaidBy,
         }])
@@ -590,15 +604,11 @@ export default function ViewBill() {
         .single();
 
       if (addExpenseError) {
-        console.error(addExpenseError);
-        showError(
-          "Error adding expense",
-          addExpenseError.message
-        )
+        setIsLoading(false); // Ensure loading stops on error
+        showError("Error adding expense", addExpenseError.message);
         return;
       };
 
-      // Insert involved people
       if (data) {
         const involvedRows = finalInvolved.map(i => ({
           expenses_id: data.id,
@@ -612,7 +622,7 @@ export default function ViewBill() {
 
         if (involvedError) throw involvedError;
 
-        // Update local state
+        // 3. Optimized Local State Update
         const newExp: Expense = {
           id: data.id,
           name: data.name,
@@ -620,18 +630,24 @@ export default function ViewBill() {
           paidBy: data.paid_by,
           involved: finalInvolved,
         };
+        
         setExpenses(prev => [newExp, ...prev]);
 
-        // Reset form
-        setExpName(''); setExpCost(''); setSelectedInvolved([]); setCustomAmounts({});
+        // Reset & Close
+        setExpName(''); 
+        setExpCost(''); 
+        setSelectedInvolved([]); 
+        setCustomAmounts({});
         setShowExpenseModal(false);
         setIsLoading(false);
-        fetchExpenses();
+        
+        // fetchExpenses(); // Optional: If state update above is successful, you might not need an extra network call
       }
 
     } catch (err) {
       console.error("Error adding expense:", err);
       setIsLoading(false);
+      showError("Unexpected Error", "Something went wrong. Please try again.");
     }
   };
 
@@ -1247,7 +1263,21 @@ export default function ViewBill() {
             </View>
             <View style={styles.inputWrapper}>
               <ThemedText style={styles.inputLabel}>Cost:</ThemedText>
-              <TextInput style={styles.modernInput} value={expCost} onChangeText={setExpCost} keyboardType="numeric" />
+              <TextInput 
+                style={styles.modernInput} 
+                value={expCost} 
+                keyboardType="decimal-pad" // Better for costs than "numeric" as it includes the dot
+                onChangeText={(text) => {
+                  // This regex removes anything that isn't a digit or a dot
+                  const cleaned = text.replace(/[^0-9.]/g, '');
+                  
+                  // Optional: Prevent multiple decimal points (e.g., "10.5.2")
+                  const parts = cleaned.split('.');
+                  if (parts.length > 2) return; 
+
+                  setExpCost(cleaned);
+                }} 
+              />
             </View>
 
             {/* PAID BY DROPDOWN */}

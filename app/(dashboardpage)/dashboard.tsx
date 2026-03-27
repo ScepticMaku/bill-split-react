@@ -6,6 +6,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import validator from 'validator';
+import { ErrorModal } from "../../components/error-modal";
 
 // --- MAIN DASHBOARD COMPONENT ---
 export default function Dashboard() {
@@ -161,7 +162,7 @@ export default function Dashboard() {
           // GUEST USER - person.id should now be the actual guest_users.id
           memberInserts.push({
             bill_id: billId,
-            user_id: null,
+            public_user_id: null,
             guest_id: person.id  // This should be the database ID from guest_users
           });
         }
