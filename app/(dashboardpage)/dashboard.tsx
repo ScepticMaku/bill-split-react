@@ -525,6 +525,7 @@ export default function Dashboard() {
         (localSelection.length > 3 || selectedInvolvedPeople.length > 3)
       ) {
         setShowPeopleLimitModal(true);
+        setShowSelectPeopleModal(false);
         return;
       }
 

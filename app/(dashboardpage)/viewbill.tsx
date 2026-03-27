@@ -60,6 +60,7 @@ export default function ViewBill() {
   const [isEditing, setIsEditing] = useState(false);
 
   const [currentUserId, setCurrentUserId] = useState('');
+  const [userRole, setUserRole] = useState('');
 
   const [billStatus, setBillStatus] = useState('');
 
@@ -93,6 +94,7 @@ export default function ViewBill() {
       .eq('auth_user_id', user?.id)
       .single()
 
+    setUserRole(roleData?.roles.name);
     setCurrentUserId(user?.id)
   }
 
@@ -187,6 +189,13 @@ export default function ViewBill() {
         return;
       }
 
+      if (userRole === "Standard" && involved.length >= 3) {
+        showError(
+          "Error adding guest to bill",
+          "You have reached the maximum amount of people to add."
+        )
+        return;
+      }
 
       // Insert the guest into guest_users table
       const { data: guestData, error: guestError } = await supabase
@@ -565,9 +574,9 @@ export default function ViewBill() {
     fetchBillData();
   }, [billId]);
 
-const handleAddExpense = async () => {
+  const handleAddExpense = async () => {
     const totalCost = parseFloat(expCost);
-    
+
     // 1. Stricter Validation
     // Checks: Name exists, Cost is a valid positive number, and at least one person is involved
     if (!expName.trim()) {
@@ -630,17 +639,17 @@ const handleAddExpense = async () => {
           paidBy: data.paid_by,
           involved: finalInvolved,
         };
-        
+
         setExpenses(prev => [newExp, ...prev]);
 
         // Reset & Close
-        setExpName(''); 
-        setExpCost(''); 
-        setSelectedInvolved([]); 
+        setExpName('');
+        setExpCost('');
+        setSelectedInvolved([]);
         setCustomAmounts({});
         setShowExpenseModal(false);
         setIsLoading(false);
-        
+
         // fetchExpenses(); // Optional: If state update above is successful, you might not need an extra network call
       }
 
@@ -870,66 +879,15 @@ const handleAddExpense = async () => {
 
     const insertSelectedPeople = async (peopleToInsert) => {
       if (peopleToInsert.length === 0) return;
-      if (involved.length + peopleToInsert.length >= 4) {
-        setShowErrorModal(true)
+
+      if (userRole === "Standard" && involved.length + peopleToInsert.length >= 3) {
+        showError(
+          "Error adding more people people",
+          "You have reached the maximum amount of people to add."
+        )
         return;
       }
 
-      const memberInserts = [];
-
-      for (const person of peopleToInsert) {
-        // Check if this is a registered user
-        const isRegisteredUser =
-          person.type === 'registered' ||
-          (person.uniqueKey && person.uniqueKey.startsWith('r-'));
-
-        if (isRegisteredUser) {
-          // REGISTERED USER
-          memberInserts.push({
-            bill_id: billId,
-            public_user_id: person.id,
-            guest_id: null
-          });
-        } else {
-          // GUEST USER - extract ID from uniqueKey
-          let guestId;
-
-          if (person.uniqueKey && person.uniqueKey.startsWith('g-')) {
-            guestId = person.uniqueKey.replace('g-', '');
-          } else {
-            guestId = person.id;
-          }
-
-          memberInserts.push({
-            bill_id: billId,
-            public_user_id: null,
-            guest_id: guestId
-          });
-        }
-      }
-
-      // Insert all selected members
-      if (memberInserts.length > 0) {
-        const { error: membersError } = await supabase
-          .from("bill_members")
-          .insert(memberInserts);
-
-        if (membersError) {
-          console.error("Error inserting members:", membersError);
-          showError(
-            "Error adding members to bill",
-            membersError.message
-          )
-          return false; // Return false to indicate failure
-        }
-      }
-
-      // Refresh the involved people list
-      if (typeof loadInvolved === 'function') {
-        await loadInvolved();
-      }
-
-      return true; // Return true to indicate success
     };
 
     return (
@@ -1263,20 +1221,20 @@ const handleAddExpense = async () => {
             </View>
             <View style={styles.inputWrapper}>
               <ThemedText style={styles.inputLabel}>Cost:</ThemedText>
-              <TextInput 
-                style={styles.modernInput} 
-                value={expCost} 
+              <TextInput
+                style={styles.modernInput}
+                value={expCost}
                 keyboardType="decimal-pad" // Better for costs than "numeric" as it includes the dot
                 onChangeText={(text) => {
                   // This regex removes anything that isn't a digit or a dot
                   const cleaned = text.replace(/[^0-9.]/g, '');
-                  
+
                   // Optional: Prevent multiple decimal points (e.g., "10.5.2")
                   const parts = cleaned.split('.');
-                  if (parts.length > 2) return; 
+                  if (parts.length > 2) return;
 
                   setExpCost(cleaned);
-                }} 
+                }}
               />
             </View>
 
