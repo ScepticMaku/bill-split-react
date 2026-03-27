@@ -106,21 +106,42 @@ export default function SignUpScreen() {
 
   const validateForm = () => {
     let newErrors = {};
+
+    // 1. Basic Required Checks
     if (validator.isEmpty(firstName.trim())) newErrors.firstName = "First name is required";
     if (validator.isEmpty(lastName.trim())) newErrors.lastName = "Last name is required";
+    
     if (validator.isEmpty(nickname.trim())) {
       newErrors.nickname = "Nickname is required";
     } else if (existingNicknames.includes(nickname.toLowerCase())) {
       newErrors.nickname = "Nickname is already taken";
     }
-    if (validator.isEmpty(username.trim())) newErrors.username = "Username is required";
+
+    // 2. Username: No spaces or special characters (letters, numbers, underscores only)
+    const usernameRegex = /^[a-zA-Z0-0_]+$/;
+    if (validator.isEmpty(username.trim())) {
+      newErrors.username = "Username is required";
+    } else if (!usernameRegex.test(username)) {
+      newErrors.username = "No spaces or special characters allowed";
+    }
+
+    // 3. Email Validation
     if (validator.isEmpty(emailAddress.trim())) {
       newErrors.email = "Email is required";
     } else if (!validator.isEmail(emailAddress.trim())) {
       newErrors.email = "Invalid email format";
     }
-    if (password.length < 8) newErrors.password = "Min 8 characters required";
-    if (!validator.equals(confirmPassword, password)) newErrors.confirmPassword = "Passwords do not match";
+
+    // 4. Strong Password Validation
+    // Min 8 chars, 1 Upper, 1 Lower, 1 Number, 1 Special
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(password)) {
+      newErrors.password = "Must be 8+ chars with Uppercase, Lowercase, Number, and Special char";
+    }
+
+    if (!validator.equals(confirmPassword, password)) {
+      newErrors.confirmPassword = "Passwords do not match";
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -137,10 +158,7 @@ export default function SignUpScreen() {
     setSignupLoading(true);
     setGeneralError('');
 
-    const {
-      data: { session },
-      error: signUpError,
-    } = await supabase.auth.signUp({
+    const { data: { session }, error: signUpError } = await supabase.auth.signUp({
       email: emailAddress,
       password: password,
       options: {
@@ -152,26 +170,30 @@ export default function SignUpScreen() {
           username: username,
         }
       }
-    })
+    });
 
+    if (signUpError) {
+      // Check for Rate Limit (Error 429)
+      if (signUpError.status === 429 || signUpError.message.includes("rate limit")) {
+        setGeneralError("Email rate limit exceeded. Please wait a while before trying again.");
+      } else {
+        setGeneralError(signUpError.message);
+      }
+      setSignupLoading(false);
+      return;
+    }
+
+    // If we reach here, Sign Up was initiated successfully
+    // Now handle the guest deletion
     const { error: deleteError } = await supabase.from("guest_users")
       .delete()
       .eq("email_address", emailAddress);
 
-    if (deleteError) {
-      console.error(deleteError);
-      setSignupLoading(false);
-      return;
-    };
+    if (deleteError) console.error("Guest deletion failed:", deleteError);
 
-    if (signUpError) {
-      console.error(signUpError);
-      setSignupLoading(false);
-      return;
-    }
+    // If no session exists, it means email confirmation is required
     if (!session) {
-      setShowModal(true)
-      // Alert.alert('Please check your inbox for email verification')
+      setShowModal(true); // This modal already contains the "Check your inbox" message
     }
 
     setSignupLoading(false);
@@ -228,24 +250,23 @@ export default function SignUpScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalIconContainer}>
-              <Ionicons name="mail" size={30} color="#FF3B30" />
+              {/* Changed icon to a checkmark or mail for success */}
+              <Ionicons name="mail-open-outline" size={30} color="#FF3B30" />
             </View>
-            <ThemedText style={styles.modalTitle}>Successfully signed up!</ThemedText>
-            <ThemedText style={styles.modalSubtitle}>Please check your inbox for your email confirmation link.</ThemedText>
+
+            {/* --- INSERT UPDATED TEXT HERE --- */}
+            <ThemedText style={styles.modalTitle}>Registration Successful!</ThemedText>
+            <ThemedText style={styles.modalSubtitle}>
+              Please check your email (**{emailAddress}**) for a verification link to activate your account.
+            </ThemedText>
+            {/* --------------------------------- */}
 
             <View style={styles.modalActionRow}>
-              {/* <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => setShowModal(false)}
-              >
-                <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
-              </TouchableOpacity> */}
-
               <TouchableOpacity
                 style={styles.confirmBtn}
-                onPress={async () => {
+                onPress={() => {
                   setShowModal(false);
-                  router.replace('/')
+                  router.replace('/(auth)/sign-in'); // Redirect to Sign In so they can log in after verifying
                 }}
               >
                 <ThemedText style={styles.confirmBtnText}>Done</ThemedText>

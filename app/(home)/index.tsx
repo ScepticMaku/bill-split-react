@@ -1,8 +1,10 @@
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/utils/supabase';
+import { ErrorModal } from '../../components/error-modal'; // Adjust path as needed
 // import { SignedIn, SignedOut, useUser } from '@clerk/clerk-expo';
 import { Link, useRouter } from 'expo-router';
 import * as React from 'react';
+import { useState } from 'react'; // Add { useState } here
 import {
   ActivityIndicator,
   ImageBackground,
@@ -29,6 +31,10 @@ export default function Page() {
   const [archivedModalVisible, setArchivedModalVisible] = React.useState(false);
   const [guestSubmitLoading, setGuestSubmitLoading] = React.useState(false);
   const [guestRegisterLoading, setGuestRegisterLoading] = React.useState(false);
+
+  
+const [errorMessage, setErrorMessage] = useState(''); // New state for errors
+
 
   // Form States
   const [inviteCode, setInviteCode] = React.useState('');
@@ -68,6 +74,14 @@ export default function Page() {
   })
 
   const handleInviteSubmit = async () => {
+    // 1. Reset any previous error state
+    setErrorMessage(''); 
+
+    // 2. Validation: Check if empty
+    if (!inviteCode.trim()) {
+      setErrorMessage('Please enter an invitation code.');
+      return;
+    }
 
     setInviteLoading(true);
 
@@ -75,32 +89,38 @@ export default function Page() {
       const { data, error } = await supabase
         .from("bills")
         .select("*")
-        .eq('invite_code', inviteCode)
+        .eq('invite_code', inviteCode.trim()); // Trim to handle accidental spaces
 
-      const fetchedBill = data[0]
+      // 3. Validation: Code not found in database
+      if (error || !data || data.length === 0) {
+        setErrorMessage('Invitation code not found.');
+        setInviteLoading(false);
+        return;
+      }
 
+      const fetchedBill = data[0];
+
+      // 4. Validation: Check if bill is archived
       if (validator.equals(fetchedBill?.status, 'archived')) {
-        // Close the invite code modal
+        setInviteLoading(false); // Stop loading before switching modals
         setModalVisible(false);
-
-        // Show the archived modal
         setArchivedModalVisible(true);
         return;
       }
 
-
-      if (validator.equals(fetchedBill?.invite_code, inviteCode)) {
-        setBill(fetchedBill)
+      // 5. Success: Proceed to step 2
+      if (validator.equals(fetchedBill?.invite_code, inviteCode.trim())) {
+        setBill(fetchedBill);
         setModalStep(2);
       }
-      setInviteLoading(false);
+      
     } catch (err) {
-      console.log(err)
+      console.log("Error fetching bill: ", err);
+      setErrorMessage('Something went wrong. Please try again.');
+    } finally {
+      // This ensures the spinner stops regardless of success or catch-block errors
       setInviteLoading(false);
     }
-
-    console.log("bill: ", bill)
-
   };
 
   // console.log(bill)
@@ -355,16 +375,32 @@ export default function Page() {
                 <>
                   <ThemedText style={styles.modalTitle}>Enter Invitation Code</ThemedText>
                   <ThemedText style={styles.modalSubtitle}>Join your friends and start splitting bills instantly.</ThemedText>
+                  
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, errorMessage ? styles.inputError : null]} // Optional: red border on error
                     placeholder="e.g - 909090"
                     placeholderTextColor="#999"
                     value={inviteCode}
-                    onChangeText={setInviteCode}
+                    onChangeText={(text) => {
+                      setInviteCode(text);
+                      if (errorMessage) setErrorMessage(''); // Clear error while typing
+                    }}
                     autoCapitalize="characters"
                   />
-                  <Pressable style={styles.primaryButtonLarge} onPress={handleInviteSubmit}>
-                    <ThemedText style={styles.primaryButtonText}>{inviteLoading ? <ActivityIndicator color="white" /> : "Next"}</ThemedText>
+
+                  {/* Render the Error Message if it exists */}
+                  {errorMessage ? (
+                    <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
+                  ) : null}
+
+                  <Pressable 
+                    style={styles.primaryButtonLarge} 
+                    onPress={handleInviteSubmit}
+                    disabled={inviteLoading}
+                  >
+                    <ThemedText style={styles.primaryButtonText}>
+                      {inviteLoading ? <ActivityIndicator color="white" /> : "Next"}
+                    </ThemedText>
                   </Pressable>
                 </>
               )}
@@ -499,4 +535,17 @@ const styles = StyleSheet.create({
   guestLinkText: { color: 'tomato', fontSize: 14, fontWeight: '700' },
   closeButton: { marginTop: 20, marginBottom: 10 },
   closeButtonText: { color: '#8E8E93', fontSize: 14, fontWeight: '600' },
+
+  inputError: {
+    borderColor: '#FF3B30', // Red border
+    borderWidth: 1,
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 14,
+    marginBottom: 10,
+    marginTop: -5, // Pulls it closer to the input
+    alignSelf: 'flex-start',
+    paddingLeft: 5,
+  },
 });
