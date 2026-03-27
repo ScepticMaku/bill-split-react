@@ -1,6 +1,5 @@
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/utils/supabase';
-import { useUser } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -23,19 +22,48 @@ const { width } = Dimensions.get('window');
 
 export default function UpgradeScreen() {
   const router = useRouter();
-  const { user } = useUser()
 
-  console.log("current user id: ", user?.id)
+  const [userId, setUserId] = useState('');
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
-  
+
   // Form states
   const [cardNumber, setCardNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [cvc, setCvc] = useState('');
   const [errors, setErrors] = useState({});
+
+  const [errorModal, setErrorModal] = useState({
+    visible: false,
+    title: '',
+    message: '',
+  });
+
+  const showError = (title: string, message: string, icon: keyof typeof Ionicons.glyphMap = 'warning-outline') => {
+    setErrorModal({
+      visible: true,
+      title,
+      message,
+    });
+  };
+
+
+  React.useEffect(() => {
+    retrieveUser();
+  }, []);
+
+  const retrieveUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: roleData, error } = await supabase
+      .from('user_has_roles')
+      .select(`roles:role_id (name)`)
+      .eq('auth_user_id', user?.id)
+      .single()
+
+    setUserId(user?.id)
+  }
 
   const features = [
     { id: 1, title: 'No limits', desc: 'Create as many groups and bills as you need.', icon: 'infinite' },
@@ -63,32 +91,32 @@ export default function UpgradeScreen() {
   const formatExpiryDate = (text) => {
     // Remove all non-digits
     const cleaned = text.replace(/\D/g, '');
-    
+
     if (cleaned.length >= 2) {
       // Add slash after first 2 digits
       const month = cleaned.slice(0, 2);
       const year = cleaned.slice(2, 4);
-      
+
       // Validate month
       if (parseInt(month) > 12) {
         return '12' + (cleaned.length > 2 ? '/' + year : '');
       }
-      
+
       return cleaned.length > 2 ? month + '/' + year : month;
     }
-    
+
     return cleaned;
   };
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     // Remove spaces and validate card number
     const cleanCardNumber = cardNumber.replace(/\s/g, '');
     if (cleanCardNumber.length !== 16 || !/^\d+$/.test(cleanCardNumber)) {
       newErrors.cardNumber = 'Please enter a valid 16-digit card number';
     }
-    
+
     // Validate expiry
     const cleanExpiry = expiryDate.replace(/\D/g, '');
     if (cleanExpiry.length !== 4) {
@@ -98,19 +126,19 @@ export default function UpgradeScreen() {
       const year = parseInt(cleanExpiry.slice(2, 4));
       const currentYear = new Date().getFullYear() % 100;
       const currentMonth = new Date().getMonth() + 1;
-      
+
       if (month < 1 || month > 12) {
         newErrors.expiryDate = 'Month must be between 01-12';
       } else if (year < currentYear || (year === currentYear && month < currentMonth)) {
         newErrors.expiryDate = 'Card has expired';
       }
     }
-    
+
     // Validate CVC
     if (cvc.length < 3 || cvc.length > 4 || !/^\d+$/.test(cvc)) {
       newErrors.cvc = 'Please enter a valid CVC';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -119,58 +147,56 @@ export default function UpgradeScreen() {
     if (!validateForm()) {
       return;
     }
-    
+
     setIsProcessing(true);
-    
+
     // Simulate payment processing with different scenarios
     setTimeout(async () => {
       setIsProcessing(false);
-      
+
       // Test different scenarios based on card number
       const lastFour = cardNumber.replace(/\s/g, '').slice(-4);
-      
+
       if (lastFour === '0002') {
         // Simulate card declined
-        Alert.alert(
-          'Payment Failed',
+        showError(
+          "Payment Failed",
           'Your card was declined. Please try a different card.',
-          [{ text: 'OK' }]
-        );
+        )
       } else if (lastFour === '0019') {
         // Simulate insufficient funds
-        Alert.alert(
-          'Payment Failed',
+        showError(
+          "Payment Failed",
           'Insufficient funds. Please try a different card.',
-          [{ text: 'OK' }]
-        );
+        )
       } else {
         // Simulate successful payment
         setPaymentSuccess(true);
-        
+
         const { error, data } = await supabase
-        .from('user_has_roles')
-        .update({
-          role_id: 3
-        })
-        .eq('clerk_user_id', user?.id)
-        .select()
+          .from('user_has_roles')
+          .update({
+            role_id: 3
+          })
+          .eq('auth_user_id', userId)
+          .select()
 
         console.log("updated: ", data)
-        
-        if(error) throw error
-        
+
+        if (error) throw error
+
         // Close modal and show success message after animation
         setTimeout(() => {
           setShowPaymentModal(false);
           setPaymentSuccess(false);
-          
+
           // Show success alert
           Alert.alert(
             'Welcome to Premium! 🎉',
             'You now have access to all premium features.',
             [
-              { 
-                text: 'Start Exploring', 
+              {
+                text: 'Start Exploring',
                 onPress: () => router.back()
               }
             ]
@@ -428,9 +454,9 @@ export default function UpgradeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#FFFFFF' 
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF'
   },
   scrollContent: {
     padding: 24,
@@ -498,8 +524,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16
   },
-  featureText: { 
-    flex: 1 
+  featureText: {
+    flex: 1
   },
   featureTitle: {
     fontSize: 16,

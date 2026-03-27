@@ -1,24 +1,28 @@
+// app/(auth)/sign-up.jsx
 import { ThemedText } from '@/components/themed-text';
+// import { useAuth } from '@/utils/auth';
+// import { db } from '@/utils/db';
 import { supabase } from '@/utils/supabase';
-import { useSignUp } from '@clerk/clerk-expo';
-import { Ionicons } from '@expo/vector-icons'; // Added for the back icon
+import { Ionicons } from '@expo/vector-icons';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import * as React from 'react';
 import {
   ActivityIndicator,
   ImageBackground,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View
 } from 'react-native';
 import validator from 'validator';
 
-// 1. FIXED: Moved InputField OUTSIDE the main component so it doesn't unmount on every keystroke
+// Keep your InputField component exactly as is
 const InputField = ({ label, value, onChange, error, secure = false, autoCap = "none" as any, keyboard = "default" as any, style = {} }) => {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const isPasswordField = secure;
@@ -31,27 +35,15 @@ const InputField = ({ label, value, onChange, error, secure = false, autoCap = "
           style={[styles.input, error && styles.inputError, isPasswordField && { paddingRight: 50 }]}
           value={value}
           onChangeText={onChange}
-          placeholder="" // Removed all placeholders
+          placeholder=""
           placeholderTextColor="#C7C7CC"
           secureTextEntry={isPasswordField && !isPasswordVisible}
           autoCapitalize={autoCap}
           keyboardType={keyboard}
-          onKeyPress={(e: any) => {
-            if (e.nativeEvent.key === ' ') {
-              e.stopPropagation();
-            }
-          }}
         />
         {isPasswordField && (
-          <Pressable
-            onPress={() => setIsPasswordVisible(!isPasswordVisible)}
-            style={styles.eyeIcon}
-          >
-            <Ionicons
-              name={isPasswordVisible ? "eye-off" : "eye"}
-              size={22}
-              color="#8E8E93"
-            />
+          <Pressable onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
+            <Ionicons name={isPasswordVisible ? "eye-off" : "eye"} size={22} color="#8E8E93" />
           </Pressable>
         )}
       </View>
@@ -62,12 +54,15 @@ const InputField = ({ label, value, onChange, error, secure = false, autoCap = "
   );
 };
 
-export default function Page() {
-  const { isLoaded, signUp, setActive } = useSignUp();
+export default function SignUpScreen() {
+  // const { signUp } = useAuth();
   const router = useRouter();
+
   const { gFName, gLName, gEmail, gId, guest } = useLocalSearchParams();
 
   // States
+  const [showModal, setShowModal] = React.useState(false)
+
   const [firstName, setFirstName] = React.useState(gFName ?? '');
   const [lastName, setLastName] = React.useState(gLName ?? '');
   const [nickname, setNickname] = React.useState('');
@@ -77,52 +72,45 @@ export default function Page() {
   const [confirmPassword, setConfirmPassword] = React.useState('');
 
   // UI States
-  const [pendingVerification, setPendingVerification] = React.useState(false);
-  const [verificationLoading, setVerificationLoading] = React.useState(false);
-  const [code, setCode] = React.useState('');
-  const [errors, setErrors] = React.useState<Record<string, string>>({});
-  const [clerkErrors, setClerkErrors] = React.useState<any>(Object);
-  const [users, setUsers] = React.useState<any[]>([]);
   const [signupLoading, setSignupLoading] = React.useState(false);
+  const [errors, setErrors] = React.useState({});
+  const [generalError, setGeneralError] = React.useState('');
 
+  // Check existing nicknames
+  const [existingNicknames, setExistingNicknames] = React.useState([]);
 
   React.useEffect(() => {
-    const getUsers = async () => {
-      try {
-        const { data: clerk_users } = await supabase.from('clerk_users').select('nickname');
-        if (clerk_users) setUsers(clerk_users);
-      } catch (error) { console.error(error); }
+    const loadNicknames = async () => {
+      // const users = await db.users.toArray();
+      // setExistingNicknames(users.map(u => u.nickname?.toLowerCase()));
     };
-    getUsers();
+    loadNicknames();
   }, []);
 
-  const transferGuestData = async (guestId: number, cid: string) => {
-    // 1. Update bill_members to replace guest_user_id with clerk_user_id
-    await supabase
-      .from('bill_members')
-      .update({ user_id: cid, guest_id: null })
-      .eq('guest_id', guestId);
+  // const transferGuestData = async (guestId, userId) => {
+  //   // Update bill_members
+  //   await db.bill_members
+  //     .where('guestId')
+  //     .equals(Number(guestId))
+  //     .modify({ userId, guestId: null });
 
-    // 2. Optionally, migrate other tables if guest had debts or expenses
-    await supabase
-      .from('expenses_involved')
-      .update({ bill_member_id: cid })  // adjust if needed
-      .eq('guest_id', guestId);
+  //   // Update expenses_involved
+  //   await db.expenses_involved
+  //     .where('guestId')
+  //     .equals(Number(guestId))
+  //     .modify({ billMemberId: userId });
 
-    // 3. Delete guest_user row if no longer needed
-    await supabase
-      .from('guest_users')
-      .delete()
-      .eq('id', guestId);
-  };
+  //   // Delete guest
+  //   await db.guests.delete(Number(guestId));
+  // };
 
   const validateForm = () => {
-    let newErrors: Record<string, string> = {};
+    let newErrors = {};
     if (validator.isEmpty(firstName.trim())) newErrors.firstName = "First name is required";
     if (validator.isEmpty(lastName.trim())) newErrors.lastName = "Last name is required";
     if (validator.isEmpty(nickname.trim())) {
       newErrors.nickname = "Nickname is required";
-    } else if (users.some(u => u.nickname?.toLowerCase() === nickname.toLowerCase())) {
+    } else if (existingNicknames.includes(nickname.toLowerCase())) {
       newErrors.nickname = "Nickname is already taken";
     }
     if (validator.isEmpty(username.trim())) newErrors.username = "Username is required";
@@ -138,128 +126,138 @@ export default function Page() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const onSignUpPress = async () => {
-    if (!isLoaded || !validateForm()) return;
-    setSignupLoading(true);
-    setClerkErrors({});
-    try {
-      await signUp.create({ firstName, lastName, username, emailAddress, password });
-      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-      setPendingVerification(true);
-    } catch (err: any) {
-      setClerkErrors(err);
-    } finally {
-      setSignupLoading(false);
+  const handleSignUp = async () => {
+    if (validateForm()) {
+      onSignUpPress();
     }
-  };
 
-  const onVerifyPress = async () => {
-    if (!isLoaded) return;
-    setVerificationLoading(true);
-    try {
-      const attempt = await signUp.attemptEmailAddressVerification({ code });
-      if (attempt.status === 'complete') {
-        const clerkUserId = attempt.createdUserId
-        await supabase.from('clerk_users').insert({ clerk_user_id: clerkUserId, nickname });
-        await supabase.from('user_has_roles').insert({ clerk_user_id: attempt.createdUserId });
-        await transferGuestData(Number(gId), clerkUserId);
-        await setActive({ session: attempt.createdSessionId });
-        router.replace('/');
-      }
-    } catch (err: any) {
-      setClerkErrors(err);
-    } finally {
-      setVerificationLoading(false);
-    }
-  };
-
-  if (pendingVerification) {
-    return (
-      <ImageBackground source={require('../../assets/images/bg.jpg')} style={styles.background}>
-        <View style={styles.overlay}>
-          <View style={styles.registerBox}>
-            <ThemedText style={styles.title}>Verify Email</ThemedText>
-            <ThemedText style={styles.subtitle}>Check your inbox for the code</ThemedText>
-            <TextInput style={styles.input} value={code} placeholder="000000" onChangeText={setCode} keyboardType="numeric" />
-            <Pressable style={styles.button} onPress={onVerifyPress}>
-              {verificationLoading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>Verify</ThemedText>}
-            </Pressable>
-          </View>
-        </View>
-      </ImageBackground>
-    );
   }
 
+  const onSignUpPress = async () => {
+    setSignupLoading(true);
+    setGeneralError('');
 
+    const {
+      data: { session },
+      error: signUpError,
+    } = await supabase.auth.signUp({
+      email: emailAddress,
+      password: password,
+      options: {
+        emailRedirectTo: 'http://localhost:8081/email-confirmed',
+        data: {
+          first_name: firstName,
+          last_name: lastName,
+          nickname: nickname,
+          username: username,
+        }
+      }
+    })
 
+    const { error: deleteError } = await supabase.from("guest_users")
+      .delete()
+      .eq("email_address", emailAddress);
+
+    if (deleteError) {
+      console.error(deleteError);
+      setSignupLoading(false);
+      return;
+    };
+
+    if (signUpError) {
+      console.error(signUpError);
+      setSignupLoading(false);
+      return;
+    }
+    if (!session) {
+      setShowModal(true)
+      // Alert.alert('Please check your inbox for email verification')
+    }
+
+    setSignupLoading(false);
+  };
 
   return (
     <ImageBackground source={require('../../assets/images/bg.jpg')} style={styles.background}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.overlay}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
           <View style={styles.registerBox}>
-            <Pressable style={styles.backButton} onPress={() => pendingVerification ? setPendingVerification(false) : router.back()}>
+            <Pressable style={styles.backButton} onPress={() => router.back()}>
               <Ionicons name="chevron-back" size={28} color="#1C1C1E" />
             </Pressable>
 
             <View style={styles.headerSection}>
-              <ThemedText style={styles.title}>{pendingVerification ? "Verify Email" : "Sign Up"}</ThemedText>
-              <ThemedText style={styles.subtitle}>
-                {pendingVerification ? "Enter the code sent to your inbox" : "Create your account to start"}
-              </ThemedText>
+              <ThemedText style={styles.title}>Sign Up</ThemedText>
+              <ThemedText style={styles.subtitle}>Create your account to start</ThemedText>
             </View>
 
-            {clerkErrors.errors?.map((err: any, i: number) => (
-              <Text key={i} style={styles.clerkError}>{err.longMessage}</Text>
-            ))}
+            {generalError ? <Text style={styles.clerkError}>{generalError}</Text> : null}
 
-            {!pendingVerification ? (
-              <>
-                <View style={styles.row}>
-                  <InputField label="First Name" value={firstName} onChange={setFirstName} error={errors.firstName} style={styles.flex1} autoCap="sentences" />
-                  <InputField label="Last Name" value={lastName} onChange={setLastName} error={errors.lastName} style={styles.flex1} autoCap="sentences" />
-                </View>
+            <View style={styles.row}>
+              <InputField label="First Name" value={firstName} onChange={setFirstName} error={errors.firstName} style={styles.flex1} autoCap="sentences" />
+              <InputField label="Last Name" value={lastName} onChange={setLastName} error={errors.lastName} style={styles.flex1} autoCap="sentences" />
+            </View>
 
-                <InputField label="Nickname" value={nickname} onChange={setNickname} error={errors.nickname} />
-                <InputField label="Username" value={username} onChange={setUsername} error={errors.username} autoCap="none" />
-                <InputField label="Email Address" value={emailAddress} onChange={setEmailAddress} error={errors.email} autoCap="none" keyboard="email-address" />
-                <InputField label="Password" value={password} onChange={setPassword} error={errors.password} secure />
-                <InputField label="Confirm Password" value={confirmPassword} onChange={setConfirmPassword} error={errors.confirmPassword} secure />
+            <InputField label="Nickname" value={nickname} onChange={setNickname} error={errors.nickname} />
+            <InputField label="Username" value={username} onChange={setUsername} error={errors.username} autoCap="none" />
+            <InputField label="Email Address" value={emailAddress} onChange={setEmailAddress} error={errors.email} autoCap="none" keyboard="email-address" />
+            <InputField label="Password" value={password} onChange={setPassword} error={errors.password} secure />
+            <InputField label="Confirm Password" value={confirmPassword} onChange={setConfirmPassword} error={errors.confirmPassword} secure />
 
-                <Pressable style={styles.button} onPress={onSignUpPress}>
-                  {signupLoading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>Create Account</ThemedText>}
-                </Pressable>
+            <Pressable style={styles.button} onPress={handleSignUp}>
+              {signupLoading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>Create Account</ThemedText>}
+            </Pressable>
 
-                <Link href="/(auth)/sign-in" asChild>
-                  <Pressable style={styles.footerPressable}>
-                    <ThemedText style={styles.footerText}>
-                      Already have an account? <ThemedText style={styles.link}>Sign In</ThemedText>
-                    </ThemedText>
-                  </Pressable>
-                </Link>
-              </>
-            ) : (
-              <>
-                <InputField label="Verification Code" value={code} onChange={setCode} error={errors.code} keyboard="numeric" />
-
-                <Pressable style={styles.button} onPress={onVerifyPress}>
-                  {verificationLoading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>Verify Account</ThemedText>}
-                </Pressable>
-
-                <Pressable onPress={() => signUp.prepareEmailAddressVerification({ strategy: 'email_code' })}>
-                  <ThemedText style={styles.footerText}>
-                    Didn't get a code? <ThemedText style={styles.link}>Resend</ThemedText>
-                  </ThemedText>
-                </Pressable>
-              </>
-            )}
+            <Link href="/(auth)/sign-in" asChild>
+              <Pressable style={styles.footerPressable}>
+                <ThemedText style={styles.footerText}>
+                  Already have an account? <ThemedText style={styles.link}>Sign In</ThemedText>
+                </ThemedText>
+              </Pressable>
+            </Link>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <Ionicons name="mail" size={30} color="#FF3B30" />
+            </View>
+            <ThemedText style={styles.modalTitle}>Successfully signed up!</ThemedText>
+            <ThemedText style={styles.modalSubtitle}>Please check your inbox for your email confirmation link.</ThemedText>
+
+            <View style={styles.modalActionRow}>
+              {/* <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setShowModal(false)}
+              >
+                <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
+              </TouchableOpacity> */}
+
+              <TouchableOpacity
+                style={styles.confirmBtn}
+                onPress={async () => {
+                  setShowModal(false);
+                  router.replace('/')
+                }}
+              >
+                <ThemedText style={styles.confirmBtnText}>Done</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ImageBackground>
   );
 }
+
 
 const styles = StyleSheet.create({
   background: { flex: 1, width: '100%', height: '100%' },
@@ -277,6 +275,7 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 10,
   },
+
   headerSection: { marginBottom: 10 },
   backButton: { position: 'absolute', top: 20, left: 16, zIndex: 10, padding: 8 },
   title: { fontSize: 32, fontWeight: '900', color: '#1C1C1E', textAlign: 'center' },
@@ -313,9 +312,82 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 5,
+
+  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: {
+    width: 320,
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
   },
   buttonText: { color: '#fff', fontSize: 18, fontWeight: '800' },
   footerPressable: { paddingVertical: 10 },
   footerText: { textAlign: 'center', color: '#8E8E93', fontSize: 14, fontWeight: '600' },
   link: { color: 'tomato', fontWeight: '800' },
+  modalIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFF0EF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  modalActionRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: '#F2F2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#8E8E93',
+  },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF3B30',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  confirmBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFF',
+  },
 });

@@ -1,9 +1,10 @@
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/utils/supabase';
-import { SignedIn, SignedOut, useUser } from '@clerk/clerk-expo';
+// import { SignedIn, SignedOut, useUser } from '@clerk/clerk-expo';
 import { Link, useRouter } from 'expo-router';
 import * as React from 'react';
 import {
+  ActivityIndicator,
   ImageBackground,
   KeyboardAvoidingView,
   Modal,
@@ -18,46 +19,84 @@ import validator from 'validator';
 
 export default function Page() {
   const router = useRouter();
-  const { user } = useUser();
+  // const { user } = useUser();
   const [modalVisible, setModalVisible] = React.useState(false);
   const [modalStep, setModalStep] = React.useState(1); // 1: Code, 2: Email, 3: Register Guest
   const [bill, setBill] = React.useState([])
   const [billMembers, setBillMembers] = React.useState([])
   const [isFound, setIsFound] = React.useState(false)
+  const [inviteLoading, setInviteLoading] = React.useState(false);
   const [archivedModalVisible, setArchivedModalVisible] = React.useState(false);
-  
+  const [guestSubmitLoading, setGuestSubmitLoading] = React.useState(false);
+  const [guestRegisterLoading, setGuestRegisterLoading] = React.useState(false);
+
   // Form States
   const [inviteCode, setInviteCode] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
 
-  const handleInviteSubmit = async() => {
+  const [errorModal, setErrorModal] = React.useState({
+    visible: false,
+    title: '',
+    message: '',
+  });
 
-    try { 
+  const showError = (title: string, message: string, icon: keyof typeof Ionicons.glyphMap = 'warning-outline') => {
+    setErrorModal({
+      visible: true,
+      title,
+      message,
+    });
+  };
+
+  React.useEffect(() => {
+    const getCurrentSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("error getting user session: ", error.message);
+        return;
+      }
+
+      if (data.session !== null) {
+        router.replace('/(dashboardpage)/dashboard')
+      }
+    }
+
+    getCurrentSession();
+  })
+
+  const handleInviteSubmit = async () => {
+
+    setInviteLoading(true);
+
+    try {
       const { data, error } = await supabase
-      .from("bills")
-      .select("*")
-      .eq('invite_code', inviteCode)
+        .from("bills")
+        .select("*")
+        .eq('invite_code', inviteCode)
 
       const fetchedBill = data[0]
-      
+
       if (validator.equals(fetchedBill?.status, 'archived')) {
-  // Close the invite code modal
-  setModalVisible(false);
+        // Close the invite code modal
+        setModalVisible(false);
 
-  // Show the archived modal
-  setArchivedModalVisible(true);
-  return;
-}
+        // Show the archived modal
+        setArchivedModalVisible(true);
+        return;
+      }
 
 
-          if (validator.equals(fetchedBill?.invite_code, inviteCode)) {
-            setBill(fetchedBill)
-            setModalStep(2);
-          }
+      if (validator.equals(fetchedBill?.invite_code, inviteCode)) {
+        setBill(fetchedBill)
+        setModalStep(2);
+      }
+      setInviteLoading(false);
     } catch (err) {
       console.log(err)
+      setInviteLoading(false);
     }
 
     console.log("bill: ", bill)
@@ -66,103 +105,153 @@ export default function Page() {
 
   // console.log(bill)
 
-const handleEmailSubmit = async () => {
-  if (!validator.isEmail(email)) {
-    alert('Incorrect email format.');
-    return;
-  }
-
-  try {
-    // Fetch bill members with guest_users
-    const { data: fetchedBillMembers, error } = await supabase
-      .from('bill_members')
-      .select(`*, guest_users:guest_id (email)`)
-      .eq('bill_id', bill.id);
-
-    if (error) {
-      console.log(error);
-      alert('Failed to fetch bill members.');
+  const handleEmailSubmit = async () => {
+    if (!validator.isEmail(email)) {
+      alert('Incorrect email format.');
       return;
     }
 
-    // Check if the email exists
-    const guestExists = fetchedBillMembers?.some(
-      (bm) => bm.guest_users?.email === email
-    );
+    setGuestSubmitLoading(true);
 
-    if (guestExists) {
-      alert('Success! Email found.');
-      router.push({
-        pathname: '/guest-view',
-        params: { billId: bill.id, inviteCode: bill.invite_code, guestEmail: email }
-      });
-      setModalVisible(false);
-    } else {
-      // Email not found, move to register guest
-      setModalStep(3);
-    }
-  } catch (err) {
-    console.log(err);
-    alert('An unexpected error occurred.');
-  }
-};
+    try {
+      // Fetch bill members with guest_users
+      const { data: fetchedBillMembers, error: fetchMemberError } = await supabase
+        .from('bill_members')
+        .select(`*, guest_users:guest_id (email), users:public_user_id (email)`)
+        .eq('bill_id', bill.id);
 
-const handleRegisterGuest = async () => {
-  // Validate inputs first
-  if (!firstName || !lastName || !validator.isEmail(email)) {
-    alert('Please enter valid first name, last name, and email.');
-    return;
-  }
-
-  try {
-    // Insert into guest_users table
-    const { data: newGuest, error: insertError } = await supabase
-      .from('guest_users')
-      .insert([{ first_name: firstName, last_name: lastName, email }])
-      .select()
-      .single(); // get the newly created guest
-
-    if (insertError) {
-      console.log(insertError);
-      alert('Failed to create guest. Try again.');
-      return;
-    }
-
-    console.log('Guest created:', newGuest);
-
-    // OPTIONAL: Add guest to bill_members table if you have bill.id
-    if (bill?.id) {
-      const { error: bmError } = await supabase.from('bill_members').insert([{
-        bill_id: bill.id,
-        guest_id: newGuest.id
-      }]);
-
-      if (bmError) {
-        console.log(bmError);
-        alert('Failed to link guest to bill.');
+      if (fetchMemberError) {
+        console.log(fetchMemberError);
+        showError(
+          "Error fetching bill members",
+          fetchMemberError.message
+        )
+        setGuestSubmitLoading(false);
         return;
       }
+
+      // Check if the email exists
+      const guestExists = fetchedBillMembers?.some(
+        (bm) => bm.guest_users?.email === email
+      );
+
+      const userExists = fetchedBillMembers?.some(
+        (bm) => bm.users?.email === email
+      );
+
+      if (guestExists) {
+        router.push({
+          pathname: '/guest-view',
+          params: { billId: bill.id, inviteCode: bill.invite_code, guestEmail: email }
+        });
+        setModalVisible(false);
+      } else if (userExists) {
+
+        showError(
+          "Guest email error",
+          "Email already exists"
+        )
+      }
+      else {
+        // Email not found, move to register guest
+        setModalStep(3);
+      }
+      setGuestSubmitLoading(false);
+    } catch (err) {
+      console.log(err);
+      setGuestSubmitLoading(false);
+    }
+  };
+
+  const handleRegisterGuest = async () => {
+    // Validate inputs first
+    if (!firstName || !lastName || !validator.isEmail(email)) {
+      alert('Please enter valid first name, last name, and email.');
+      return;
     }
 
-    // Close modal
-    setModalVisible(false);
+    setGuestRegisterLoading(true);
 
-    // Navigate to guest view
-    router.push({
-      pathname: '/guest-view',
-      params: { inviteCode: inviteCode, guestEmail: email }
-    });
+    try {
 
-    // Reset modal after short delay
-    setTimeout(() => {
-      resetModal();
-    }, 500);
+      // Check if the email already exists
+      const { data: fetchedBillMembers, error: emailExistsError } = await supabase
+        .from('bill_members')
+        .select(`*, guest_users:guest_id (email), users:public_user_id (email)`);
 
-  } catch (err) {
-    console.log(err);
-    alert('An unexpected error occurred.');
-  }
-};
+      const emailExists = fetchedBillMembers?.some(
+        (bm) => bm.guest_users?.email === email || bm.users?.email === email
+      );
+
+      if (emailExists) {
+        console.error(emailExistsError);
+        showError(
+          "Guest email error",
+          "Email already exists"
+        )
+        setGuestRegisterLoading(false);
+        return;
+      }
+
+      // Insert into guest_users table
+      const { data: newGuest, error: insertError } = await supabase
+        .from('guest_users')
+        .insert([{ first_name: firstName, last_name: lastName, email }])
+        .select()
+        .single(); // get the newly created guest
+
+      if (insertError) {
+        console.log(insertError);
+        alert('Failed to create guest. Try again.');
+        showError(
+          "Error creating guest",
+          insertError.message
+        )
+        setGuestRegisterLoading(false);
+        return;
+      }
+
+      console.log('Guest created:', newGuest);
+
+      // OPTIONAL: Add guest to bill_members table if you have bill.id
+      if (bill?.id) {
+        const { error: bmError } = await supabase.from('bill_members').insert([{
+          bill_id: bill.id,
+          guest_id: newGuest.id
+        }]);
+
+        if (bmError) {
+          console.log(bmError);
+          showError(
+            "Guest link to bill error",
+            bmError.message
+          );
+          setGuestRegisterLoading(false);
+          return;
+        }
+      }
+
+      // Close modal
+      setModalVisible(false);
+
+      // Navigate to guest view
+      router.push({
+        pathname: '/guest-view',
+        params: { inviteCode: inviteCode, guestEmail: email }
+      });
+
+      // Reset modal after short delay
+      setTimeout(() => {
+        resetModal();
+      }, 500);
+
+      setGuestRegisterLoading(false);
+    } catch (err) {
+      console.log(err);
+      alert('An unexpected error occurred.');
+      setGuestRegisterLoading(false);
+    }
+  };
 
   const resetModal = () => {
     setModalVisible(false);
@@ -190,25 +279,25 @@ const handleRegisterGuest = async () => {
             </ThemedText>
           </View>
 
-          <SignedOut>
-            <View style={styles.buttonGroup}>
-              <Link href="/(auth)/sign-in" asChild>
-                <Pressable style={styles.secondaryButton}>
-                  <ThemedText style={styles.secondaryButtonText}>Sign In</ThemedText>
-                </Pressable>
-              </Link>
-              <Link href="/(auth)/sign-up" asChild>
-                <Pressable style={styles.primaryButton}>
-                  <ThemedText style={styles.primaryButtonText}>Sign Up</ThemedText>
-                </Pressable>
-              </Link>
-            </View>
-            <Pressable style={styles.inviteLinkContainer} onPress={() => setModalVisible(true)}>
-              <ThemedText style={styles.inviteLinkText}>Have an invitation code?</ThemedText>
-            </Pressable>
-          </SignedOut>
 
-          <SignedIn>
+          <View style={styles.buttonGroup}>
+            <Link href="/(auth)/sign-in" asChild>
+              <Pressable style={styles.secondaryButton}>
+                <ThemedText style={styles.secondaryButtonText}>Sign In</ThemedText>
+              </Pressable>
+            </Link>
+            <Link href="/(auth)/sign-up" asChild>
+              <Pressable style={styles.primaryButton}>
+                <ThemedText style={styles.primaryButtonText}>Sign Up</ThemedText>
+              </Pressable>
+            </Link>
+          </View>
+          <Pressable style={styles.inviteLinkContainer} onPress={() => setModalVisible(true)}>
+            <ThemedText style={styles.inviteLinkText}>Have an invitation code?</ThemedText>
+          </Pressable>
+
+
+          {/* <SignedIn>
             <View style={styles.signedInContainer}>
               <ThemedText style={styles.welcomeBack}>Hello, {user?.firstName || 'User'}!</ThemedText>
               <Link href="/(dashboardpage)/dashboard" asChild>
@@ -217,32 +306,32 @@ const handleRegisterGuest = async () => {
                 </Pressable>
               </Link>
             </View>
-          </SignedIn>
+          </SignedIn> */}
         </View>
       </View>
-  
-  <Modal
-  animationType="slide"
-  transparent={true}
-  visible={archivedModalVisible}
-  onRequestClose={() => setArchivedModalVisible(false)}
->
-  <View style={styles.modalOverlay}>
-    <View style={styles.modalContent}>
-      <View style={styles.modalHandle} />
-      <ThemedText style={styles.modalTitle}>Archived Bill</ThemedText>
-      <ThemedText style={styles.modalSubtitle}>
-        You can't access an archived bill.
-      </ThemedText>
-      <Pressable
-        style={styles.primaryButtonLarge}
-        onPress={() => setArchivedModalVisible(false)}
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={archivedModalVisible}
+        onRequestClose={() => setArchivedModalVisible(false)}
       >
-        <ThemedText style={styles.primaryButtonText}>Close</ThemedText>
-      </Pressable>
-    </View>
-  </View>
-</Modal> 
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHandle} />
+            <ThemedText style={styles.modalTitle}>Archived Bill</ThemedText>
+            <ThemedText style={styles.modalSubtitle}>
+              You can't access an archived bill.
+            </ThemedText>
+            <Pressable
+              style={styles.primaryButtonLarge}
+              onPress={() => setArchivedModalVisible(false)}
+            >
+              <ThemedText style={styles.primaryButtonText}>Close</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         animationType="slide"
@@ -250,15 +339,15 @@ const handleRegisterGuest = async () => {
         visible={modalVisible}
         onRequestClose={resetModal}
       >
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHandle} />
-            
-            <ScrollView 
-              style={{ width: '100%' }} 
+
+            <ScrollView
+              style={{ width: '100%' }}
               contentContainerStyle={{ alignItems: 'center' }}
               showsVerticalScrollIndicator={false}
             >
@@ -275,7 +364,7 @@ const handleRegisterGuest = async () => {
                     autoCapitalize="characters"
                   />
                   <Pressable style={styles.primaryButtonLarge} onPress={handleInviteSubmit}>
-                    <ThemedText style={styles.primaryButtonText}>Next</ThemedText>
+                    <ThemedText style={styles.primaryButtonText}>{inviteLoading ? <ActivityIndicator color="white" /> : "Next"}</ThemedText>
                   </Pressable>
                 </>
               )}
@@ -284,7 +373,7 @@ const handleRegisterGuest = async () => {
                 <>
                   <ThemedText style={styles.codeIndicator}>You have entered the code: {bill?.invite_code}</ThemedText>
                   <ThemedText style={styles.billNameText}>{bill.name}</ThemedText>
-                  
+
                   <View style={styles.formGroup}>
                     <ThemedText style={styles.inputLabel}>Enter email address:</ThemedText>
                     <TextInput
@@ -299,7 +388,7 @@ const handleRegisterGuest = async () => {
                   </View>
 
                   <Pressable style={styles.primaryButtonLarge} onPress={handleEmailSubmit}>
-                    <ThemedText style={styles.primaryButtonText}>Submit</ThemedText>
+                    <ThemedText style={styles.primaryButtonText}>{guestSubmitLoading ? <ActivityIndicator color="white" /> : "Submit"}</ThemedText>
                   </Pressable>
 
                   <Pressable style={styles.guestLink} onPress={() => setModalStep(3)}>
@@ -311,8 +400,8 @@ const handleRegisterGuest = async () => {
               {modalStep === 3 && (
                 <>
                   <ThemedText style={styles.modalTitle}>Create Guest Account</ThemedText>
-                  <ThemedText style={[styles.modalSubtitle, { marginBottom: 20 }]}>Please provide your details to continue.</ThemedText>
-                  
+                  <ThemedText style={[styles.modalSubtitle, { marginBottom: 20 }]}>Please procvide your details to continue.</ThemedText>
+
                   <View style={styles.formGroup}>
                     <ThemedText style={styles.inputLabel}>First Name</ThemedText>
                     <TextInput
@@ -348,7 +437,7 @@ const handleRegisterGuest = async () => {
                   </View>
 
                   <Pressable style={styles.primaryButtonLarge} onPress={handleRegisterGuest}>
-                    <ThemedText style={styles.primaryButtonText}>Create & Join</ThemedText>
+                    <ThemedText style={styles.primaryButtonText}>{guestRegisterLoading ? <ActivityIndicator color="white" /> : "Create & Join"}</ThemedText>
                   </Pressable>
                 </>
               )}
@@ -360,6 +449,13 @@ const handleRegisterGuest = async () => {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <ErrorModal
+        visible={errorModal.visible}
+        onClose={() => setErrorModal({ ...errorModal, visible: false })}
+        title={errorModal.title}
+        message={errorModal.message}
+      />
     </ImageBackground>
   );
 }
@@ -382,7 +478,7 @@ const styles = StyleSheet.create({
   welcomeBack: { color: '#fff', fontSize: 16, textAlign: 'center', marginBottom: 15, fontWeight: '600' },
   inviteLinkContainer: { marginTop: 25, alignItems: 'center' },
   inviteLinkText: { color: 'rgba(255,255,255,0.7)', fontSize: 14, textDecorationLine: 'underline' },
-  
+
 
   /* --- MODAL CORE STYLES --- */
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
@@ -390,12 +486,12 @@ const styles = StyleSheet.create({
   modalHandle: { width: 40, height: 5, backgroundColor: '#E0E0E0', borderRadius: 10, marginBottom: 20 },
   modalTitle: { fontSize: 24, fontWeight: '800', color: '#1C1C1E', marginBottom: 10, textAlign: 'center' },
   modalSubtitle: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 25 },
-  
+
   /* --- FORM STYLES --- */
   formGroup: { width: '100%', marginBottom: 5 },
   inputLabel: { fontSize: 14, color: '#1C1C1E', fontWeight: '700', marginBottom: 8, marginLeft: 5 },
   input: { width: '100%', height: 60, backgroundColor: '#F2F2F7', borderRadius: 15, paddingHorizontal: 20, color: '#000', fontSize: 16, fontWeight: '600', marginBottom: 15, borderWidth: 1, borderColor: '#E5E5EA' },
-  
+
   /* --- STEP 2 & 3 DECORATION --- */
   codeIndicator: { fontSize: 13, color: '#8E8E93', marginBottom: 5, fontWeight: '500' },
   billNameText: { fontSize: 20, fontWeight: '800', color: '#1C1C1E', marginBottom: 25 },
