@@ -76,16 +76,17 @@ export default function SignUpScreen() {
   const [errors, setErrors] = React.useState({});
   const [generalError, setGeneralError] = React.useState('');
 
-  // Check existing nicknames
   const [existingNicknames, setExistingNicknames] = React.useState([]);
 
   React.useEffect(() => {
-    const loadNicknames = async () => {
-      // const users = await db.users.toArray();
-      // setExistingNicknames(users.map(u => u.nickname?.toLowerCase()));
-    };
     loadNicknames();
   }, []);
+
+  const loadNicknames = async () => {
+    const { data: nicknameData } = await supabase.from("users").select("nickname");
+
+    setExistingNicknames(nicknameData?.map(n => n.nickname));
+  }
 
   // const transferGuestData = async (guestId, userId) => {
   //   // Update bill_members
@@ -110,7 +111,7 @@ export default function SignUpScreen() {
     // 1. Basic Required Checks
     if (validator.isEmpty(firstName.trim())) newErrors.firstName = "First name is required";
     if (validator.isEmpty(lastName.trim())) newErrors.lastName = "Last name is required";
-    
+
     if (validator.isEmpty(nickname.trim())) {
       newErrors.nickname = "Nickname is required";
     } else if (existingNicknames.includes(nickname.toLowerCase())) {
@@ -134,8 +135,8 @@ export default function SignUpScreen() {
 
     // 4. Strong Password Validation
     // Min 8 chars, 1 Upper, 1 Lower, 1 Number, 1 Special
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!passwordRegex.test(password)) {
+    // const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!validator.isStrongPassword(password)) {
       newErrors.password = "Must be 8+ chars with Uppercase, Lowercase, Number, and Special char";
     }
 
@@ -151,7 +152,6 @@ export default function SignUpScreen() {
     if (validateForm()) {
       onSignUpPress();
     }
-
   }
 
   const onSignUpPress = async () => {
