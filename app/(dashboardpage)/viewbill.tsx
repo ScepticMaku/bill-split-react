@@ -189,7 +189,7 @@ export default function ViewBill() {
         return;
       }
 
-      if (userRole === "Standard" && involved.length >= 3) {
+      if (userRole === "Standard" && involved.length >= 4) {
         showError(
           "Error adding guest to bill",
           "You have reached the maximum amount of people to add."
@@ -880,7 +880,7 @@ export default function ViewBill() {
     const insertSelectedPeople = async (peopleToInsert) => {
       if (peopleToInsert.length === 0) return;
 
-      if (userRole === "Standard" && involved.length + peopleToInsert.length >= 3) {
+      if (userRole === "Standard" && involved.length + peopleToInsert.length >= 4) {
         showError(
           "Error adding more people people",
           "You have reached the maximum amount of people to add."
