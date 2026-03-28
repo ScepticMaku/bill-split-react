@@ -1522,6 +1522,7 @@ export default function ViewBill() {
                 value={guestFirstName}
                 onChangeText={setGuestFirstName}
                 placeholder="Enter first name"
+                placeholderTextColor="#999"
                 editable={!isAddingGuest}
               />
               {guestErrors.guestFirst && (
@@ -1536,6 +1537,7 @@ export default function ViewBill() {
                 value={guestLastName}
                 onChangeText={setGuestLastName}
                 placeholder="Enter last name"
+                placeholderTextColor="#999"
                 editable={!isAddingGuest}
               />
             </View>
@@ -1549,6 +1551,7 @@ export default function ViewBill() {
                 keyboardType="email-address"
                 placeholder="Enter email address"
                 autoCapitalize="none"
+                placeholderTextColor="#999"
                 editable={!isAddingGuest}
               />
               {guestErrors.guestEmail && (
