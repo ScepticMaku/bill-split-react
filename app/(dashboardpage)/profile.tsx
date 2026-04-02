@@ -3,7 +3,7 @@ import { ThemedText } from '@/components/themed-text';
 import { supabase } from "@/utils/supabase";
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import validator from 'validator';
 
 // Memoized InputField component with disabled state support
@@ -227,7 +227,10 @@ export default function Profile() {
       setTimeout(() => setSaveSuccess(false), 3000);
 
     } catch (error: any) {
-      Alert.alert("Update Failed", error.message);
+      showError(
+        "Update Failed",
+        error.message
+      )
     } finally {
       setUpdateLoading(false);
     }

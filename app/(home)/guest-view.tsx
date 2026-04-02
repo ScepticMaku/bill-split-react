@@ -42,6 +42,23 @@ export default function GuestBillView() {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   useEffect(() => {
+    const getCurrentSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("error getting user session: ", error.message);
+        return;
+      }
+
+      if (data.session !== null) {
+        router.replace('/(dashboardpage)/dashboard');
+      }
+    }
+
+    getCurrentSession();
+  }, [])
+
+  useEffect(() => {
     fetchGuestBillData();
     fetchGuestInfo();
   }, [inviteCode, guestEmail, billId]);
