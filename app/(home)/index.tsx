@@ -32,8 +32,8 @@ export default function Page() {
   const [guestSubmitLoading, setGuestSubmitLoading] = React.useState(false);
   const [guestRegisterLoading, setGuestRegisterLoading] = React.useState(false);
 
-  
-const [errorMessage, setErrorMessage] = useState(''); // New state for errors
+
+  const [errorMessage, setErrorMessage] = useState(''); // New state for errors
 
 
   // Form States
@@ -75,7 +75,7 @@ const [errorMessage, setErrorMessage] = useState(''); // New state for errors
 
   const handleInviteSubmit = async () => {
     // 1. Reset any previous error state
-    setErrorMessage(''); 
+    setErrorMessage('');
 
     // 2. Validation: Check if empty
     if (!inviteCode.trim()) {
@@ -113,7 +113,7 @@ const [errorMessage, setErrorMessage] = useState(''); // New state for errors
         setBill(fetchedBill);
         setModalStep(2);
       }
-      
+
     } catch (err) {
       console.log("Error fetching bill: ", err);
       setErrorMessage('Something went wrong. Please try again.');
@@ -127,7 +127,10 @@ const [errorMessage, setErrorMessage] = useState(''); // New state for errors
 
   const handleEmailSubmit = async () => {
     if (!validator.isEmail(email)) {
-      alert('Incorrect email format.');
+      showError(
+        "Error Submitting Email",
+        "Email address but be a correct format."
+      );
       return;
     }
 
@@ -174,7 +177,11 @@ const [errorMessage, setErrorMessage] = useState(''); // New state for errors
       }
       else {
         // Email not found, move to register guest
-        setModalStep(3);
+        // setModalStep(3);
+        showError(
+          "Email Address Error",
+          "Email address does not exists"
+        );
       }
       setGuestSubmitLoading(false);
     } catch (err) {
@@ -185,9 +192,33 @@ const [errorMessage, setErrorMessage] = useState(''); // New state for errors
 
   const handleRegisterGuest = async () => {
     // Validate inputs first
-    if (!firstName || !lastName || !validator.isEmail(email)) {
-      alert('Please enter valid first name, last name, and email.');
-      return;
+
+    if (!firstName) {
+      showError(
+        "Error Registering",
+        "First name is required."
+      );
+    }
+
+    if (!lastName) {
+      showError(
+        "Error Registering",
+        "Last name is required."
+      );
+    }
+
+    if (!email) {
+      showError(
+        "Error Registering",
+        "Email name is required."
+      );
+    }
+
+    if (!validator.isEmail(email)) {
+      showError(
+        "Error Registering",
+        "Email must be a correct format."
+      );
     }
 
     setGuestRegisterLoading(true);
@@ -222,7 +253,6 @@ const [errorMessage, setErrorMessage] = useState(''); // New state for errors
 
       if (insertError) {
         console.log(insertError);
-        alert('Failed to create guest. Try again.');
         showError(
           "Error creating guest",
           insertError.message
@@ -268,7 +298,11 @@ const [errorMessage, setErrorMessage] = useState(''); // New state for errors
       setGuestRegisterLoading(false);
     } catch (err) {
       console.log(err);
-      alert('An unexpected error occurred.');
+      // alert('An unexpected error occurred.');
+      showError(
+        "An Unexpected Error Occured",
+        JSON.stringify(err)
+      );
       setGuestRegisterLoading(false);
     }
   };
@@ -375,7 +409,7 @@ const [errorMessage, setErrorMessage] = useState(''); // New state for errors
                 <>
                   <ThemedText style={styles.modalTitle}>Enter Invitation Code</ThemedText>
                   <ThemedText style={styles.modalSubtitle}>Join your friends and start splitting bills instantly.</ThemedText>
-                  
+
                   <TextInput
                     style={[styles.input, errorMessage ? styles.inputError : null]} // Optional: red border on error
                     placeholder="e.g - 909090"
@@ -393,8 +427,8 @@ const [errorMessage, setErrorMessage] = useState(''); // New state for errors
                     <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
                   ) : null}
 
-                  <Pressable 
-                    style={styles.primaryButtonLarge} 
+                  <Pressable
+                    style={styles.primaryButtonLarge}
                     onPress={handleInviteSubmit}
                     disabled={inviteLoading}
                   >

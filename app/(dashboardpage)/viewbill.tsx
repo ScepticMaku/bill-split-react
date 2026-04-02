@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import validator from 'validator';
 
 
 
@@ -93,6 +94,8 @@ export default function ViewBill() {
       .select(`roles:role_id (name)`)
       .eq('auth_user_id', user?.id)
       .single()
+
+    // console.log("retrieved user id: ", user?.id);
 
     setUserRole(roleData?.roles.name);
     setCurrentUserId(user?.id)
@@ -530,19 +533,26 @@ export default function ViewBill() {
   };
 
   useEffect(() => {
-
     setExpensesLoading(true);
 
     const fetchBillData = async () => {
       if (!billId) return;
+      if (!currentUserId) return;
 
       try {
         // 1️⃣ Fetch invite code from bills table
         const { data: billData, error: billError } = await supabase
           .from('bills')
-          .select('invite_code, status')
+          .select('created_by, invite_code, status')
           .eq('id', billId)
           .single();
+
+        console.log("Created by: ", billData?.created_by);
+        console.log("current user id: ", currentUserId);
+
+        if (!validator.equals(billData?.created_by, currentUserId)) {
+          router.replace('/(dashboardpage)/dashboard');
+        }
 
         if (billError) throw billError;
         setInviteCode(billData?.invite_code || '');
@@ -572,7 +582,7 @@ export default function ViewBill() {
     };
 
     fetchBillData();
-  }, [billId]);
+  }, [billId, currentUserId]);
 
   const handleAddExpense = async () => {
     const totalCost = parseFloat(expCost);

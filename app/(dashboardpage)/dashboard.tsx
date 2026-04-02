@@ -101,7 +101,10 @@ export default function Dashboard() {
 
   const createBill = async () => {
     if (!billName) {
-      alert("Bill name required");
+      showError(
+        "Error Adding Bill",
+        "Bill name is required"
+      );
       return;
     }
 
@@ -287,13 +290,40 @@ export default function Dashboard() {
   };
 
   const handleAddGuestSubmit = async () => {
-    if (!guestFirst || !guestEmail) {
-      alert("First name and Email are required");
-      return;
+    // if (!guestFirst || !guestEmail || !guestLast) {
+    //   showError(
+    //     "Error Adding Guest",
+    //     ""
+    //   )
+    //   return;
+    // }
+    if (!guestFirst) {
+      showError(
+        "Error Adding Guest",
+        "First name is required."
+      );
     }
 
+    if (!guestLast) {
+      showError(
+        "Error Adding Guest",
+        "Last name is required"
+      );
+    }
+
+    if (!guestFirst) {
+      showError(
+        "Error Adding Guest",
+        "Email address is required"
+      );
+    }
+
+
     if (!validator.isEmail(guestEmail)) {
-      alert("Please enter a valid email address");
+      showError(
+        "Error Adding Guest",
+        "Please enter valid email address"
+      );
       return;
     }
 

@@ -15,6 +15,23 @@ export default function DashboardLayout() {
   const [firstName, setFirstName] = useState('')
 
   useEffect(() => {
+    const getCurrentSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("error getting user session: ", error.message);
+        return;
+      }
+
+      if (data.session === null) {
+        router.replace('/(auth)/sign-in');
+      }
+    }
+
+    getCurrentSession();
+  }, [])
+
+  useEffect(() => {
     fetchUser()
   }, [])
 
