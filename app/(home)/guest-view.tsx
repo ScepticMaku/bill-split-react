@@ -41,6 +41,7 @@ export default function GuestBillView() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
+
   useEffect(() => {
     const getCurrentSession = async () => {
       const { data, error } = await supabase.auth.getSession();
@@ -308,7 +309,7 @@ export default function GuestBillView() {
           .from('bill_members')
           .select(`
             id,
-            users:public_user_id (nickname),
+            users:public_user_id (auth_user_id, nickname),
             guest_users:guest_id (first_name, last_name)
           `)
           .eq('bill_id', billData.id);
@@ -322,7 +323,7 @@ export default function GuestBillView() {
   };
 
   const getDisplayName = (member) => {
-    if (member.clerk_users?.nickname) return member.clerk_users.nickname;
+    if (member.users?.nickname) return member.users.nickname;
     if (member.guest_users) {
       return `${member.guest_users.first_name} ${member.guest_users.last_name || ''}`.trim();
     }
@@ -356,6 +357,8 @@ export default function GuestBillView() {
     );
   }
   const totalBill = expenses.reduce((sum, exp) => sum + (Number(exp.cost) || 0), 0);
+
+  console.log("involved: ", involved);
 
   return (
     <View style={styles.container}>
@@ -451,7 +454,12 @@ export default function GuestBillView() {
                   <ThemedText style={styles.memberName} numberOfLines={1}>
                     {getDisplayName(member)}
                   </ThemedText>
-                  {member.clerk_users ? (
+                  {member.users?.auth_user_id === bill.created_by ? (
+                    <View style={styles.ownerBadge}>
+                      <Ionicons name="shield-checkmark" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+                      <ThemedText style={styles.ownerBadgeText}>Owner</ThemedText>
+                    </View>
+                  ) : member.users ? (
                     <Ionicons name="checkmark-circle" size={16} color="#34C759" />
                   ) : (
                     <View style={styles.guestBadge}><ThemedText style={styles.guestBadgeText}>Guest</ThemedText></View>
@@ -659,4 +667,22 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', // Monospace keeps numbers from jumping
   },
+  ownerBadge: {
+    backgroundColor: '#FFB800', // Gold color
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ownerBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  avatarOwner: {
+    borderWidth: 2,
+    borderColor: '#FFB800',
+  }
 });

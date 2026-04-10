@@ -169,18 +169,42 @@ export default function ViewBill() {
 
     try {
 
-      // Check if guest email already exists
-      const { data: existingGuest, error: checkError } = await supabase
-        .from("guest_users")
-        .select("id, first_name, last_name, email")
+      // Check if guest email already exists in users
+      const { data: existingEmail, error: checkEmailError } = await supabase
+        .from("users")
+        .select("*")
         .eq("email", guestEmail)
         .maybeSingle();
 
-      if (checkError) {
-        console.error("Error checking existing guest:", checkError);
+      if (checkEmailError) {
+        console.error("Error checking existing guest:", checkEmailError);
         showError(
           "Error checking existing guest",
-          checkError.message
+          checkEmailError.message
+        )
+        return;
+      }
+
+      // If email already exists, show the error modal
+      if (existingEmail) {
+        setShowGuestModal(false);
+        setShowEmailExistsModal(true);
+        return;
+      }
+
+
+      // Check if guest email already exists
+      const { data: existingGuest, error: checkGuestError } = await supabase
+        .from("guest_users")
+        .select("email")
+        .eq("email", guestEmail)
+        .maybeSingle();
+
+      if (checkGuestError) {
+        console.error("Error checking existing guest:", checkGuestError);
+        showError(
+          "Error checking existing guest",
+          checkGuestError.message
         )
         return;
       }
@@ -807,7 +831,7 @@ export default function ViewBill() {
         // Filter clerk users
         involved.map(i => {
           filtered = filtered.filter(u =>
-            u.id != i.user_id
+            u.id != i.auth_user_id
           )
           console.log("involved: ", i)
         });
@@ -857,8 +881,6 @@ export default function ViewBill() {
       // First, insert the selected people
       await insertSelectedPeople(localSelection);
 
-      // Then pass the selection to parent (if needed)
-      onConfirm(localSelection);
 
       // Reset local selection state
       setLocalSelection([]);
@@ -890,14 +912,41 @@ export default function ViewBill() {
     const insertSelectedPeople = async (peopleToInsert) => {
       if (peopleToInsert.length === 0) return;
 
-      if (userRole === "Standard" && involved.length + peopleToInsert.length >= 4) {
+      console.log("Involved length: ", involved.length);
+      console.log("People to insert lenght: ", peopleToInsert.length);
+
+      if (userRole === "Standard" && involved.length + peopleToInsert.length > 4) {
         showError(
           "Error adding more people people",
           "You have reached the maximum amount of people to add."
-        )
+        );
         return;
       }
 
+      try {
+        // Map selections to your DB schema
+        const insertData = peopleToInsert.map(person => ({
+          bill_id: billId,
+          public_user_id: person.type === 'registered' ? person.id : null,
+          guest_id: person.type === 'guest' ? person.id : null,
+        }));
+
+        const { error } = await supabase
+          .from("bill_members") // Use your actual table name here
+          .insert(insertData);
+
+        if (error) throw error;
+
+        // Refresh parent data so the new people show up on the main screen
+        if (loadInvolved) await loadInvolved();
+
+        // Notify parent of the selection
+        onConfirm(peopleToInsert);
+
+      } catch (error) {
+        console.error("Error inserting people:", error.message);
+        showError("Error", "Failed to add people to the bill.");
+      }
     };
 
     return (
@@ -989,7 +1038,9 @@ export default function ViewBill() {
         </View>
       </Modal>
     );
+
   };
+
 
   return (
     <View style={styles.container}>
@@ -1138,6 +1189,7 @@ export default function ViewBill() {
               {involved.map((member) => {
                 const isRegistered = !!member.users;
                 const displayName = getDisplayName(member);
+                const isOwner = member.public_user_id === currentUserId;
 
                 return (
                   <View key={member.id} style={styles.memberRow}>
@@ -1152,11 +1204,17 @@ export default function ViewBill() {
                         {displayName}
                       </ThemedText>
                       <ThemedText style={styles.memberRole}>
-                        {isRegistered ? 'Verified User' : 'Guest'}
+                        {isOwner ? 'Group Owner' : (isRegistered ? 'Verified User' : 'Guest')}
                       </ThemedText>
                     </View>
 
-                    {isRegistered ? (
+                    {/* Badge Logic */}
+                    {isOwner ? (
+                      <View style={styles.ownerBadge}>
+                        <Ionicons name="shield-checkmark" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+                        <ThemedText style={styles.ownerBadgeText}>Owner</ThemedText>
+                      </View>
+                    ) : isRegistered ? (
                       <Ionicons name="checkmark-circle" size={18} color="#34C759" />
                     ) : (
                       <View style={styles.guestBadge}>
@@ -1581,6 +1639,7 @@ export default function ViewBill() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
       <SelectPeopleModal
         visible={showSelectPeopleModal}
         onClose={() => {
@@ -2065,4 +2124,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'tomato',
     borderRadius: 2,
   },
+  ownerBadge: {
+    backgroundColor: '#FFB800', // Gold color
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ownerBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  avatarOwner: {
+    borderWidth: 2,
+    borderColor: '#FFB800',
+  }
 });
